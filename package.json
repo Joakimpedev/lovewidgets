@@ -33,6 +33,7 @@
     "expo": "~54.0.25",
     "expo-clipboard": "^8.0.7",
     "expo-constants": "~18.0.10",
+    "expo-dev-client": "~6.0.20",
     "expo-file-system": "^19.0.19",
     "expo-font": "~14.0.9",
     "expo-haptics": "~15.0.7",
@@ -67,6 +68,9 @@
     "eslint-config-expo": "~10.0.0",
     "fs-extra": "^11.3.2",
     "typescript": "~5.9.2"
+  },
+  "overrides": {
+    "@react-native-async-storage/async-storage": "2.2.0"
   },
   "private": true
 }
