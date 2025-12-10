@@ -14,7 +14,6 @@ function withAndroidWidget(config) {
       const projectRoot = config.modRequest.projectRoot;
       const androidProjectPath = path.join(projectRoot, 'android');
       
-      // Only proceed if android folder exists (after prebuild)
       if (!fs.existsSync(androidProjectPath)) {
         console.log('[withAndroidWidget] Android folder not found, skipping file copy (will run during prebuild)');
         return config;
@@ -24,217 +23,99 @@ function withAndroidWidget(config) {
       const androidMainPath = path.join(androidProjectPath, 'app', 'src', 'main');
       const androidJavaPath = path.join(androidMainPath, 'java', 'com', 'lovewidgets', 'app', 'widget');
       const androidResPath = path.join(androidMainPath, 'res');
-      const androidResLayoutPath = path.join(androidResPath, 'layout');
-      const androidResXmlPath = path.join(androidResPath, 'xml');
-      const androidResValuesPath = path.join(androidResPath, 'values');
 
-      // Create directories if they don't exist
-      [androidJavaPath, androidResLayoutPath, androidResXmlPath, androidResValuesPath].forEach(dir => {
-        if (!fs.existsSync(dir)) {
-          fs.mkdirSync(dir, { recursive: true });
-        }
-      });
+      // Create directories
+      fs.mkdirSync(androidJavaPath, { recursive: true });
+      fs.mkdirSync(path.join(androidResPath, 'layout'), { recursive: true });
+      fs.mkdirSync(path.join(androidResPath, 'xml'), { recursive: true });
+      fs.mkdirSync(path.join(androidResPath, 'values'), { recursive: true });
 
       // Copy Kotlin files
-      const kotlinFiles = ['LoveWidget.kt', 'WidgetStorageModule.kt', 'WidgetStoragePackage.kt'];
-      kotlinFiles.forEach(fileName => {
-        const kotlinSource = path.join(widgetSourcePath, fileName);
-        const kotlinDest = path.join(androidJavaPath, fileName);
-        if (fs.existsSync(kotlinSource)) {
-          fs.copyFileSync(kotlinSource, kotlinDest);
-          console.log(`[withAndroidWidget] Copied ${fileName}`);
-        }
+      ['LoveWidget.kt', 'WidgetStorageModule.kt', 'WidgetStoragePackage.kt'].forEach(fileName => {
+        const src = path.join(widgetSourcePath, fileName);
+        if (fs.existsSync(src)) fs.copyFileSync(src, path.join(androidJavaPath, fileName));
       });
 
-      // Copy layout XML
-      const layoutSource = path.join(widgetSourcePath, 'widget_layout.xml');
-      const layoutDest = path.join(androidResLayoutPath, 'widget_layout.xml');
-      if (fs.existsSync(layoutSource)) {
-        fs.copyFileSync(layoutSource, layoutDest);
-        console.log('[withAndroidWidget] Copied widget_layout.xml');
-      }
-
-      // Copy widget info XML
-      const widgetInfoSource = path.join(widgetSourcePath, 'widget_info.xml');
-      const widgetInfoDest = path.join(androidResXmlPath, 'widget_info.xml');
-      if (fs.existsSync(widgetInfoSource)) {
-        fs.copyFileSync(widgetInfoSource, widgetInfoDest);
-        console.log('[withAndroidWidget] Copied widget_info.xml');
-      }
-
-      // Copy strings XML
-      const stringsSource = path.join(widgetSourcePath, 'strings.xml');
-      const stringsDest = path.join(androidResValuesPath, 'strings.xml');
-      if (fs.existsSync(stringsSource)) {
-        fs.copyFileSync(stringsSource, stringsDest);
-        console.log('[withAndroidWidget] Copied strings.xml');
-      }
+      // Copy Resources
+      const copyRes = (file, folder) => {
+        const src = path.join(widgetSourcePath, file);
+        if (fs.existsSync(src)) fs.copyFileSync(src, path.join(androidResPath, folder, file));
+      };
+      
+      copyRes('widget_layout.xml', 'layout');
+      copyRes('widget_info.xml', 'xml');
+      copyRes('strings.xml', 'values');
 
       return config;
     },
   ]);
 
-  // Step 2: Update AndroidManifest.xml to register the widget
+  // Step 2: Update AndroidManifest.xml
   config = withAndroidManifest(config, (config) => {
-    const manifest = config.modResults;
-    const { manifest: manifestData } = manifest;
+    const mainApplication = config.modResults.manifest.application[0];
+    const widgetReceiverName = 'com.lovewidgets.app.widget.LoveWidget';
 
-    // Find or create the <application> tag
-    if (!manifestData.application) {
-      manifestData.application = [{}];
-    }
-    const application = manifestData.application[0];
+    if (!mainApplication.receiver) mainApplication.receiver = [];
 
-    // Find or create the <receiver> array
-    if (!application.receiver) {
-      application.receiver = [];
-    }
-
-    // Check if widget receiver already exists
-    const existingReceiver = application.receiver.find(
-      (receiver) => receiver.$?.['android:name'] === 'com.lovewidgets.app.widget.LoveWidget'
-    );
-
-    if (!existingReceiver) {
-      // Add the widget receiver
-      // FIX: Use the FULLY QUALIFIED package name to avoid resolving errors
-      application.receiver.push({
-        $: {
-          'android:name': 'com.lovewidgets.app.widget.LoveWidget', // <--- FIXED HERE
-          'android:exported': 'true',
-        },
-        'intent-filter': [
-          {
-            action: [
-              {
-                $: {
-                  'android:name': 'android.appwidget.action.APPWIDGET_UPDATE',
-                },
-              },
-              {
-                $: {
-                  'android:name': 'com.lovewidgets.app.widget.UPDATE',
-                },
-              },
-            ],
-          },
-        ],
-        'meta-data': [
-          {
-            $: {
-              'android:name': 'android.appwidget.provider',
-              'android:resource': '@xml/widget_info',
-            },
-          },
-        ],
+    // Avoid duplicate registration
+    if (!mainApplication.receiver.some(r => r.$['android:name'] === widgetReceiverName)) {
+      mainApplication.receiver.push({
+        $: { 'android:name': widgetReceiverName, 'android:exported': 'true' },
+        'intent-filter': [{
+          action: [
+            { $: { 'android:name': 'android.appwidget.action.APPWIDGET_UPDATE' } },
+            { $: { 'android:name': 'com.lovewidgets.app.widget.UPDATE' } }
+          ]
+        }],
+        'meta-data': [{
+          $: { 'android:name': 'android.appwidget.provider', 'android:resource': '@xml/widget_info' }
+        }]
       });
-
-      console.log('[withAndroidWidget] Added widget receiver to AndroidManifest.xml');
     }
-
     return config;
   });
 
-  // Step 3: Register the native module in MainApplication
-  config = withAppBuildGradle(config, (config) => {
-    const buildGradle = config.modResults.contents;
-    
-    // Check if we've already added the package
-    if (buildGradle.includes('WidgetStoragePackage')) {
-      return config;
-    }
-
-    return config;
-  });
-
-  // Step 4: Modify MainApplication to register the package
+  // Step 3: Modify MainApplication.kt to register the Package
   config = withDangerousMod(config, [
     'android',
     async (config) => {
-      const projectRoot = config.modRequest.projectRoot;
-      const androidProjectPath = path.join(projectRoot, 'android');
+      const androidRoot = path.join(config.modRequest.projectRoot, 'android');
+      // Locate MainApplication.kt
+      const mainAppPath = path.join(androidRoot, 'app', 'src', 'main', 'java', 'com', 'lovewidgets', 'app', 'MainApplication.kt');
       
-      if (!fs.existsSync(androidProjectPath)) {
+      if (!fs.existsSync(mainAppPath)) {
+        console.warn('[withAndroidWidget] Could not find MainApplication.kt');
         return config;
       }
 
-      // Find MainApplication file
-      const mainApplicationPath = path.join(
-        androidProjectPath,
-        'app',
-        'src',
-        'main',
-        'java',
-        'com',
-        'lovewidgets',
-        'app',
-        'MainApplication.kt'
-      );
+      let content = fs.readFileSync(mainAppPath, 'utf8');
 
-      // Also check for .java file
-      const mainApplicationJavaPath = path.join(
-        androidProjectPath,
-        'app',
-        'src',
-        'main',
-        'java',
-        'com',
-        'lovewidgets',
-        'app',
-        'MainApplication.java'
-      );
-
-      let mainApplicationFile = null;
-      if (fs.existsSync(mainApplicationPath)) {
-        mainApplicationFile = mainApplicationPath;
-      } else if (fs.existsSync(mainApplicationJavaPath)) {
-        mainApplicationFile = mainApplicationJavaPath;
+      // 1. Add the Import
+      if (!content.includes('import com.lovewidgets.app.widget.WidgetStoragePackage')) {
+        // Add import after the package declaration
+        content = content.replace(
+          /package com\.lovewidgets\.app/,
+          'package com.lovewidgets.app\n\nimport com.lovewidgets.app.widget.WidgetStoragePackage'
+        );
       }
 
-      if (mainApplicationFile) {
-        let content = fs.readFileSync(mainApplicationFile, 'utf8');
-        
-        // Check if already registered
-        if (content.includes('WidgetStoragePackage')) {
-          return config;
-        }
-
-        // Add import
-        if (!content.includes('import com.lovewidgets.app.widget.WidgetStoragePackage')) {
-          const importRegex = /(import\s+[^\n]+\n)/g;
-          const imports = content.match(importRegex) || [];
-          const lastImportIndex = content.lastIndexOf(imports[imports.length - 1] || '');
-          if (lastImportIndex !== -1) {
-            const insertIndex = lastImportIndex + (imports[imports.length - 1] || '').length;
-            content = content.slice(0, insertIndex) + 
-                     'import com.lovewidgets.app.widget.WidgetStoragePackage\n' + 
-                     content.slice(insertIndex);
+      // 2. Add the Package to the List
+      // We look for the standard Expo comment: "// add(MyReactNativePackage())"
+      if (!content.includes('add(WidgetStoragePackage())')) {
+        const anchor = '// add(MyReactNativePackage())';
+        if (content.includes(anchor)) {
+          content = content.replace(anchor, `${anchor}\n            add(WidgetStoragePackage())`);
+          console.log('[withAndroidWidget] Registered WidgetStoragePackage');
+        } else {
+          // Fallback: Try to find the closing brace of the apply block
+          const fallbackAnchor = 'PackageList(this).packages.apply {';
+          if (content.includes(fallbackAnchor)) {
+             content = content.replace(fallbackAnchor, `${fallbackAnchor}\n            add(WidgetStoragePackage())`);
           }
         }
-
-        // Add to packages list in getPackages() - Handles both Old and New Architecture patterns
-        // Note: For New Arch, MainApplication often auto-links, but manual linking is safe here
-        if (content.includes('getPackages()') && !content.includes('WidgetStoragePackage()')) {
-          content = content.replace(
-            /(packages\.add\([^)]+\))/g,
-            (match) => {
-              return match + '\n      packages.add(WidgetStoragePackage())';
-            }
-          );
-        } else if (content.includes('PackageList(this).packages.apply') && !content.includes('WidgetStoragePackage()')) {
-             // Fallback regex for the specific Kotlin pattern we saw earlier
-             const pattern = /PackageList\(this\)\.packages\.apply\s*\{/;
-             if (pattern.test(content)) {
-                 content = content.replace(pattern, 'PackageList(this).packages.apply {\n            add(WidgetStoragePackage())');
-             }
-        }
-
-        fs.writeFileSync(mainApplicationFile, content, 'utf8');
-        console.log('[withAndroidWidget] Registered WidgetStoragePackage in MainApplication');
-      } else {
-        console.warn('[withAndroidWidget] MainApplication file not found, native module may not work');
       }
-
+      
+      fs.writeFileSync(mainAppPath, content);
       return config;
     },
   ]);
