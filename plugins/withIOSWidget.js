@@ -5,7 +5,7 @@ const path = require('path');
 const APP_GROUP_ID = 'group.com.lovewidgets.data';
 const WIDGET_BUNDLE_ID = 'com.lovewidgets.app.widget';
 const WIDGET_TARGET_NAME = 'LoveWidget';
-const DEPLOYMENT_TARGET = '17.0';
+const DEPLOYMENT_TARGET = '16.0';
 
 /**
  * Expo Config Plugin for iOS Widget
