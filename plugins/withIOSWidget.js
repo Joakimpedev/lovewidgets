@@ -237,7 +237,7 @@ function addEmbedAppExtensionsBuildPhase(project, mainAppTargetUuid, widgetTarge
         isa: 'PBXCopyFilesBuildPhase',
         buildActionMask: 2147483647,
         dstPath: '',
-        dstSubfolderSpec: 10, // 10 = Wrapper (embed in app bundle)
+        dstSubfolderSpec: 13, // 10 = Wrapper (embed in app bundle)
         name: 'Embed App Extensions',
         runOnlyForDeploymentPostprocessing: 0,
         files: []
