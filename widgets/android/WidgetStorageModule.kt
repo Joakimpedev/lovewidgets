@@ -5,11 +5,13 @@ import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
 import com.facebook.react.bridge.Promise
+import com.facebook.react.module.annotations.ReactModule
 
 /**
  * Native module to save widget data to SharedPreferences
  * This ensures the widget can read the data reliably
  */
+ @ReactModule(name = "WidgetStorageModule")
 class WidgetStorageModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaModule(reactContext) {
 
     override fun getName(): String {
