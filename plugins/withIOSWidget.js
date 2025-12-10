@@ -99,6 +99,8 @@ function withIOSWidget(config) {
       console.log('[withIOSWidget] Widget target already exists, skipping creation');
       // Still need to ensure entitlements are set
       ensureAppGroupEntitlements(project, mainAppTarget, existingWidgetTarget, platformProjectRoot);
+      // Ensure embed phase exists even if target already exists
+      addEmbedAppExtensionsBuildPhase(project, mainAppTargetUuid, existingWidgetTarget.uuid, WIDGET_TARGET_NAME);
       return config;
     }
 
@@ -178,12 +180,15 @@ function withIOSWidget(config) {
     // Ensure main app has App Group entitlement
     ensureAppGroupEntitlements(project, mainAppTarget, widgetTargetObj, platformProjectRoot);
 
-    // Add widget target as dependency of main app (embed extension)
+    // Add widget target as dependency of main app
     try {
       project.addTargetDependency(mainAppTargetUuid, [{ target: widgetTargetUuid }]);
     } catch (error) {
       console.warn('[withIOSWidget] Could not add target dependency:', error.message);
     }
+
+    // Add "Embed App Extensions" build phase to main app target
+    addEmbedAppExtensionsBuildPhase(project, mainAppTargetUuid, widgetTargetUuid, WIDGET_TARGET_NAME);
 
     console.log('[withIOSWidget] Successfully created Widget Extension target');
 
@@ -191,6 +196,127 @@ function withIOSWidget(config) {
   });
 
   return config;
+}
+
+/**
+ * Adds "Embed App Extensions" build phase to embed the widget extension into the main app
+ */
+function addEmbedAppExtensionsBuildPhase(project, mainAppTargetUuid, widgetTargetUuid, widgetTargetName) {
+  try {
+    const objects = project.hash.project.objects;
+    
+    // Get main app target
+    const nativeTargets = project.pbxNativeTargetSection();
+    const mainAppTarget = nativeTargets[mainAppTargetUuid];
+    
+    if (!mainAppTarget) {
+      console.warn('[withIOSWidget] Could not find main app target for embedding');
+      return;
+    }
+
+    // Find existing "Embed App Extensions" build phase
+    let embedPhaseUuid = null;
+    const copyFilesPhases = objects.PBXCopyFilesBuildPhase || {};
+    
+    // Check if main app target already has an "Embed App Extensions" phase
+    const mainAppBuildPhases = mainAppTarget.buildPhases || [];
+    for (const phase of mainAppBuildPhases) {
+      const phaseUuid = phase.value || phase;
+      const phaseObj = copyFilesPhases[phaseUuid];
+      if (phaseObj && (phaseObj.name === 'Embed App Extensions' || phaseObj.name === '"Embed App Extensions"')) {
+        embedPhaseUuid = phaseUuid;
+        break;
+      }
+    }
+
+    // Create new "Embed App Extensions" build phase if it doesn't exist
+    if (!embedPhaseUuid) {
+      embedPhaseUuid = project.generateUuid();
+      
+      const embedPhase = {
+        isa: 'PBXCopyFilesBuildPhase',
+        buildActionMask: 2147483647,
+        dstPath: '',
+        dstSubfolderSpec: 10, // 10 = Wrapper (embed in app bundle)
+        name: 'Embed App Extensions',
+        runOnlyForDeploymentPostprocessing: 0,
+        files: []
+      };
+
+      // Add to project objects
+      if (!objects.PBXCopyFilesBuildPhase) {
+        objects.PBXCopyFilesBuildPhase = {};
+      }
+      objects.PBXCopyFilesBuildPhase[embedPhaseUuid] = embedPhase;
+
+      // Add to main app target's buildPhases
+      if (!mainAppTarget.buildPhases) {
+        mainAppTarget.buildPhases = [];
+      }
+      mainAppTarget.buildPhases.push({
+        value: embedPhaseUuid,
+        comment: 'Embed App Extensions'
+      });
+      
+      console.log('[withIOSWidget] Created Embed App Extensions build phase');
+    }
+
+    const embedPhase = objects.PBXCopyFilesBuildPhase[embedPhaseUuid];
+    
+    // Create file reference for the widget extension product (.appex)
+    const productFileRefUuid = project.generateUuid();
+    const productFileRef = {
+      isa: 'PBXFileReference',
+      explicitFileType: 'wrapper.app-extension',
+      includeInIndex: 0,
+      path: `${widgetTargetName}.appex`,
+      sourceTree: 'BUILT_PRODUCTS_DIR'
+    };
+
+    // Add file reference to project
+    if (!objects.PBXFileReference) {
+      objects.PBXFileReference = {};
+    }
+    objects.PBXFileReference[productFileRefUuid] = productFileRef;
+
+    // Create build file for the widget extension product
+    const buildFileUuid = project.generateUuid();
+    const buildFile = {
+      isa: 'PBXBuildFile',
+      fileRef: productFileRefUuid,
+      settings: {
+        ATTRIBUTES: ['CodeSignOnCopy', 'RemoveHeadersOnCopy']
+      }
+    };
+
+    // Add build file to project
+    if (!objects.PBXBuildFile) {
+      objects.PBXBuildFile = {};
+    }
+    objects.PBXBuildFile[buildFileUuid] = buildFile;
+
+    // Check if widget extension is already in the embed phase
+    const embedFiles = embedPhase.files || [];
+    const alreadyAdded = embedFiles.some(file => {
+      const fileUuid = file.value || file;
+      const fileObj = objects.PBXBuildFile[fileUuid];
+      return fileObj && fileObj.fileRef === productFileRefUuid;
+    });
+
+    // Add widget extension to embed phase if not already added
+    if (!alreadyAdded) {
+      embedFiles.push({
+        value: buildFileUuid,
+        comment: `${widgetTargetName}.appex in Embed App Extensions`
+      });
+      embedPhase.files = embedFiles;
+      console.log('[withIOSWidget] Added widget extension to Embed App Extensions build phase');
+    }
+
+  } catch (error) {
+    console.warn('[withIOSWidget] Could not add Embed App Extensions build phase:', error.message);
+    // Don't throw - allow build to continue even if embedding fails
+  }
 }
 
 /**
