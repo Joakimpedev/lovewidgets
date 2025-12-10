@@ -92,15 +92,15 @@ function withAndroidWidget(config) {
 
     // Check if widget receiver already exists
     const existingReceiver = application.receiver.find(
-      (receiver) => receiver.$?.['android:name'] === '.widget.LoveWidget' || receiver.$?.['android:name'] === '.LoveWidget'
+      (receiver) => receiver.$?.['android:name'] === 'com.lovewidgets.app.widget.LoveWidget'
     );
 
     if (!existingReceiver) {
       // Add the widget receiver
-      // Note: Class is in package com.lovewidgets.app.widget, so use .widget.LoveWidget
+      // FIX: Use the FULLY QUALIFIED package name to avoid resolving errors
       application.receiver.push({
         $: {
-          'android:name': '.widget.LoveWidget',
+          'android:name': 'com.lovewidgets.app.widget.LoveWidget', // <--- FIXED HERE
           'android:exported': 'true',
         },
         'intent-filter': [
@@ -144,8 +144,6 @@ function withAndroidWidget(config) {
       return config;
     }
 
-    // Find the MainApplication file and modify it via withDangerousMod
-    // This is complex, so we'll handle it in the next step
     return config;
   });
 
@@ -203,7 +201,6 @@ function withAndroidWidget(config) {
 
         // Add import
         if (!content.includes('import com.lovewidgets.app.widget.WidgetStoragePackage')) {
-          // Find the last import statement and add after it
           const importRegex = /(import\s+[^\n]+\n)/g;
           const imports = content.match(importRegex) || [];
           const lastImportIndex = content.lastIndexOf(imports[imports.length - 1] || '');
@@ -215,16 +212,21 @@ function withAndroidWidget(config) {
           }
         }
 
-        // Add to packages list in getPackages()
+        // Add to packages list in getPackages() - Handles both Old and New Architecture patterns
+        // Note: For New Arch, MainApplication often auto-links, but manual linking is safe here
         if (content.includes('getPackages()') && !content.includes('WidgetStoragePackage()')) {
-          // Find the packages list and add our package
           content = content.replace(
             /(packages\.add\([^)]+\))/g,
             (match) => {
-              // Add our package after the last existing package
               return match + '\n      packages.add(WidgetStoragePackage())';
             }
           );
+        } else if (content.includes('PackageList(this).packages.apply') && !content.includes('WidgetStoragePackage()')) {
+             // Fallback regex for the specific Kotlin pattern we saw earlier
+             const pattern = /PackageList\(this\)\.packages\.apply\s*\{/;
+             if (pattern.test(content)) {
+                 content = content.replace(pattern, 'PackageList(this).packages.apply {\n            add(WidgetStoragePackage())');
+             }
         }
 
         fs.writeFileSync(mainApplicationFile, content, 'utf8');
@@ -241,4 +243,3 @@ function withAndroidWidget(config) {
 }
 
 module.exports = withAndroidWidget;
-
