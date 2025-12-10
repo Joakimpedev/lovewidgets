@@ -14,7 +14,6 @@
       "supportsTablet": true,
       "entitlements": {
         "com.apple.security.application-groups": [
-          "group.com.lovewidgets.data",
           "group.com.lovewidgets.data"
         ]
       },

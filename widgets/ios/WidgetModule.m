@@ -16,5 +16,10 @@ RCT_EXTERN_METHOD(reloadTimelines:(NSString *)kind
                   resolve:(RCTPromiseResolveBlock)resolve
                   rejecter:(RCTPromiseRejectBlock)reject)
 
+RCT_EXTERN_METHOD(saveWidgetData:(NSString *)key
+                  value:(NSString *)value
+                  resolve:(RCTPromiseResolveBlock)resolve
+                  rejecter:(RCTPromiseRejectBlock)reject)
+
 @end
 
