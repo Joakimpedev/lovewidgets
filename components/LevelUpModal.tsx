@@ -9,6 +9,7 @@ import React, { useEffect, useRef } from 'react';
 import {
   Animated,
   Dimensions,
+  Image,
   Modal,
   Platform,
   ScrollView,
@@ -17,8 +18,9 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { Sparkles, Lock, Coins } from 'lucide-react-native';
+import { Sparkles, Lock } from 'lucide-react-native';
 import { Colors } from '@/constants/Colors';
+import { hasAsset, UIAssets } from '@/constants/Assets';
 import {
   FlowerSeed,
   FlowerTypeId,
@@ -163,7 +165,11 @@ export function LevelUpModal({
                     </View>
                   ) : (
                     <View style={styles.priceBadge}>
-                      <Coins size={12} color={Colors.light.streakFire} />
+                      {hasAsset(UIAssets.coin) ? (
+                        <Image source={UIAssets.coin} style={styles.coinIconSmall} resizeMode="contain" />
+                      ) : (
+                        <View style={[styles.coinIconSmall, { backgroundColor: Colors.light.streakFire, borderRadius: 6 }]} />
+                      )}
                       <Text style={styles.priceText}>{flower.price}</Text>
                     </View>
                   )}
@@ -181,7 +187,11 @@ export function LevelUpModal({
 
           {/* Coins display */}
           <View style={styles.coinsDisplay}>
-            <Coins size={16} color={Colors.light.streakFire} />
+            {hasAsset(UIAssets.coin) ? (
+              <Image source={UIAssets.coin} style={styles.coinIcon} resizeMode="contain" />
+            ) : (
+              <View style={[styles.coinIcon, { backgroundColor: Colors.light.streakFire, borderRadius: 8 }]} />
+            )}
             <Text style={styles.coinsText}>{userCoins} coins</Text>
           </View>
 
@@ -314,6 +324,14 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     color: Colors.light.text,
+  },
+  coinIconSmall: {
+    width: 12,
+    height: 12,
+  },
+  coinIcon: {
+    width: 16,
+    height: 16,
   },
   rarityBadge: {
     position: 'absolute',

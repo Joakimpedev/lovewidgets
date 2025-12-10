@@ -3,15 +3,15 @@
  * Handles navigation structure and authentication flow
  */
 
-import { useEffect, useState } from 'react';
-import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { Stack, useRouter, useSegments } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
+import { StatusBar } from 'expo-status-bar';
+import { useEffect, useState } from 'react';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import 'react-native-reanimated';
 
-import { useColorScheme } from '@/hooks/use-color-scheme';
+import { initRevenueCat, logOutRevenueCat, setRevenueCatUserId } from '@/config/revenueCatConfig';
 import { Colors } from '@/constants/Colors';
 import { AuthProvider, useAuth } from '@/context/AuthContext';
 import { ColorThemeProvider, useTheme } from '@/context/ThemeContext';
@@ -40,13 +40,34 @@ function createNavigationTheme(colors: ReturnType<typeof Colors>, isDark: boolea
 // ============================================
 
 function RootLayoutNav() {
-  const colorScheme = useColorScheme();
   const router = useRouter();
   const segments = useSegments();
   const { user, isLoading } = useAuth();
-  const { colors: themeColors } = useTheme();
+  const { colors: themeColors, colorScheme } = useTheme();
   
   const [isNavigationReady, setIsNavigationReady] = useState(false);
+
+  // Initialize RevenueCat when app starts
+  useEffect(() => {
+    initRevenueCat().catch((error) => {
+      console.error('[RootLayout] Failed to initialize RevenueCat:', error);
+    });
+  }, []);
+
+  // Set RevenueCat user ID when user logs in/out
+  useEffect(() => {
+    if (!isLoading) {
+      if (user) {
+        setRevenueCatUserId(user.uid).catch((error) => {
+          console.error('[RootLayout] Failed to set RevenueCat user ID:', error);
+        });
+      } else {
+        logOutRevenueCat().catch((error) => {
+          console.error('[RootLayout] Failed to log out RevenueCat:', error);
+        });
+      }
+    }
+  }, [user, isLoading]);
 
   // Hide splash screen once auth state is determined
   useEffect(() => {
@@ -80,6 +101,7 @@ function RootLayoutNav() {
     );
   }
 
+  // Use theme-aware colorScheme instead of system colorScheme
   const theme = createNavigationTheme(themeColors, colorScheme === 'dark');
 
   return (

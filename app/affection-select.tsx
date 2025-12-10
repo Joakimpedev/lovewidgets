@@ -36,6 +36,8 @@ import { useAuth } from '@/context/AuthContext';
 import { subscribeToUserProfile, UserProfile, getUserProfileFromFirestore } from '@/utils/pairing';
 import { sendAffection } from '@/utils/letters';
 import { waterSharedGarden } from '@/utils/gardenState';
+import { PremiumUnlockModal } from '@/components/PremiumUnlockModal';
+import { usePremiumModal } from '@/hooks/usePremiumModal';
 
 export type AffectionType = 
   | 'kiss' 
@@ -76,6 +78,7 @@ export default function AffectionSelectScreen() {
   const colors = themeColors[colorScheme ?? 'light'];
 
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const premiumModal = usePremiumModal();
 
   // Subscribe to user profile to get premium status
   useEffect(() => {
@@ -92,8 +95,8 @@ export default function AffectionSelectScreen() {
 
   async function handleSelect(option: AffectionOption) {
     if (option.isPremium && !isPremium) {
-      // Show premium prompt (for now just console log)
-      console.log('🔒 Premium feature - upgrade to unlock!');
+      // Show premium unlock modal
+      premiumModal.show();
       return;
     }
     
@@ -184,13 +187,26 @@ export default function AffectionSelectScreen() {
       </ScrollView>
 
       {!isPremium && (
-        <View style={[styles.premiumPrompt, { backgroundColor: colors.highlight }]}>
+        <TouchableOpacity
+          style={[styles.premiumPrompt, { backgroundColor: colors.highlight }]}
+          onPress={() => premiumModal.show()}
+          activeOpacity={0.8}
+        >
           <Sparkles size={18} color={colors.tint} />
           <Text style={[styles.premiumPromptText, { color: colors.tint }]}>
             Unlock all affections with Premium
           </Text>
-        </View>
+        </TouchableOpacity>
       )}
+
+      {/* Premium Unlock Modal */}
+      <PremiumUnlockModal
+        visible={premiumModal.isVisible}
+        onClose={premiumModal.hide}
+        onPurchaseComplete={() => {
+          // Premium status will update automatically via subscription
+        }}
+      />
     </SafeAreaView>
   );
 }

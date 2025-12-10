@@ -16,6 +16,7 @@ import { useTheme } from '@/context/ThemeContext';
 export default function TabLayout() {
   const colorScheme = useColorScheme();
   const { colors: themeColors } = useTheme();
+  // Colors already have visual theme applied globally in ThemeContext
   const colors = themeColors[colorScheme ?? 'light'];
   
   // Get actual safe area insets (works on both iOS and Android)

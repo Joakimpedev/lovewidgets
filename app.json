@@ -6,18 +6,28 @@
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "lovewidgets",
-    "userInterfaceStyle": "automatic",
+    "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "ios": {
+      "bundleIdentifier": "com.lovewidgets.app",
+      "googleServicesFile": "./GoogleService-Info.plist",
       "supportsTablet": true,
       "entitlements": {
         "com.apple.security.application-groups": [
+          "group.com.lovewidgets.data",
           "group.com.lovewidgets.data"
         ]
+      },
+      "buildNumber": "1",
+      "infoPlist": {
+        "NSPhotoLibraryUsageDescription": "LoveWidgets needs access to your photos to set your profile picture and add images to your scrapbook.",
+        "NSPhotoLibraryAddUsageDescription": "LoveWidgets needs permission to save images to your photo library when you share creations.",
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
       "package": "com.lovewidgets.app",
+      "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -33,7 +43,6 @@
     },
     "plugins": [
       "expo-router",
-      "expo-dev-client",
       [
         "expo-splash-screen",
         {
@@ -46,7 +55,8 @@
           }
         }
       ],
-      "./plugins/withAndroidWidget.js"
+      "./plugins/withIOSWidget",
+      "./plugins/withAndroidWidget"
     ],
     "experiments": {
       "typedRoutes": true,

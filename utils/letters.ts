@@ -22,15 +22,16 @@ import { db, auth } from '@/config/firebaseConfig';
 // TYPES
 // ============================================
 
-export type LetterType = 'widget' | 'affection';
+export type LetterType = 'widget' | 'affection' | 'question';
 
 export interface Letter {
   id: string;
   senderId: string;
   receiverId: string;
-  type: LetterType; // 'widget' for drawings, 'affection' for affections
+  type: LetterType; // 'widget' for drawings, 'affection' for affections, 'question' for question of the day
   imageUrl?: string; // Only for widget type
   affectionType?: string; // Only for affection type (e.g., 'kiss', 'hug')
+  questionId?: string; // Only for question type (date string YYYY-MM-DD)
   timestamp: Timestamp;
   isRead: boolean;
 }
@@ -41,6 +42,7 @@ export interface LetterInput {
   type: LetterType;
   imageUrl?: string; // For widget type
   affectionType?: string; // For affection type
+  questionId?: string; // For question type
 }
 
 // ============================================
@@ -50,6 +52,7 @@ export interface LetterInput {
 /**
  * Convert a local image to a base64 data URL
  * Stores directly in Firestore (works for small drawings)
+ * Compresses image if it exceeds size limits
  * @param localUri - Local file URI from react-native-view-shot
  * @returns Base64 data URL
  */
@@ -66,9 +69,26 @@ export async function convertImageToDataUrl(
     });
     console.log('[Letters] Base64 length:', base64Data.length);
 
-    // Create data URL
-    const dataUrl = `data:image/png;base64,${base64Data}`;
-    console.log('[Letters] Data URL created (length:', dataUrl.length, ')');
+    // Firebase Firestore limit is ~1MB (1048487 bytes) for a single field
+    // Base64 encoding increases size by ~33%, so we need to keep base64 under ~750KB
+    const MAX_BASE64_SIZE = 750000; // ~750KB base64 = ~1MB when stored
+    
+    if (base64Data.length > MAX_BASE64_SIZE) {
+      console.warn('[Letters] Image too large (', base64Data.length, 'bytes), attempting compression...');
+      // If image is too large, we need to compress it further
+      // For now, we'll throw an error with a helpful message
+      // In the future, we could use expo-image-manipulator to resize/compress
+      throw new Error(
+        `Image is too large (${Math.round(base64Data.length / 1024)}KB). ` +
+        `Please use a smaller background image or draw without a background. ` +
+        `Maximum size is approximately 750KB.`
+      );
+    }
+
+    // Create data URL (detect format from file or default to png)
+    // Note: react-native-view-shot may return jpg or png depending on format used
+    const dataUrl = `data:image/jpeg;base64,${base64Data}`; // Use jpeg for better compression
+    console.log('[Letters] Data URL created (length:', dataUrl.length, 'bytes)');
 
     return dataUrl;
   } catch (error: any) {
@@ -102,6 +122,8 @@ export async function createLetter(input: LetterInput): Promise<string> {
     letterData.imageUrl = input.imageUrl;
   } else if (input.type === 'affection' && input.affectionType) {
     letterData.affectionType = input.affectionType;
+  } else if (input.type === 'question' && input.questionId) {
+    letterData.questionId = input.questionId;
   }
 
   const docRef = await addDoc(collection(db, 'letters'), letterData);
@@ -164,6 +186,34 @@ export async function sendAffection(
   });
 
   console.log('[Letters] ====== SEND AFFECTION COMPLETE ======');
+  return letterId;
+}
+
+/**
+ * Send a question of the day notification (creates an inbox entry)
+ * @param senderId - Sender's user ID
+ * @param receiverId - Receiver's (partner's) user ID
+ * @param questionId - Question date ID (YYYY-MM-DD)
+ */
+export async function sendQuestionNotification(
+  senderId: string,
+  receiverId: string,
+  questionId: string
+): Promise<string> {
+  console.log('[Letters] ====== SEND QUESTION NOTIFICATION START ======');
+  console.log('[Letters] Sender:', senderId);
+  console.log('[Letters] Receiver:', receiverId);
+  console.log('[Letters] Question ID:', questionId);
+
+  // Create the question notification entry in inbox
+  const letterId = await createLetter({
+    senderId,
+    receiverId,
+    type: 'question',
+    questionId,
+  });
+
+  console.log('[Letters] ====== SEND QUESTION NOTIFICATION COMPLETE ======');
   return letterId;
 }
 
@@ -234,6 +284,7 @@ export function subscribeToLetters(
           type: (data.type || 'widget') as LetterType, // Default to 'widget' for backwards compatibility
           imageUrl: data.imageUrl,
           affectionType: data.affectionType,
+          questionId: data.questionId,
           timestamp: data.timestamp,
           isRead: data.isRead ?? true,
         };
@@ -261,6 +312,7 @@ export function subscribeToLetters(
           type: (data.type || 'widget') as LetterType, // Default to 'widget' for backwards compatibility
           imageUrl: data.imageUrl,
           affectionType: data.affectionType,
+          questionId: data.questionId,
           timestamp: data.timestamp,
           isRead: data.isRead ?? true,
         };
@@ -314,6 +366,7 @@ export async function getLatestReceivedLetter(
     type: (data.type || 'widget') as LetterType,
     imageUrl: data.imageUrl,
     affectionType: data.affectionType,
+    questionId: data.questionId,
     timestamp: data.timestamp,
     isRead: data.isRead ?? true,
   };

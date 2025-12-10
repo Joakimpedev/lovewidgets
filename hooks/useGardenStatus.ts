@@ -9,18 +9,19 @@ import { useAuth } from '@/context/AuthContext';
 import {
   applySharedPunishment,
   calculateGardenStatus,
+  canUserWater,
   FlowerHealth,
   GardenState,
   GardenStatus,
   PlantedFlower,
-  plantFlower,
+  PlantedDecor,
+  PlantedLandmark,
   subscribeToSharedGardenState,
+  updateSharedGardenState,
   waterSharedGarden,
-  devSimulateTimePassing,
-  devWaterGarden
 } from '@/utils/gardenState';
 import { subscribeToUserProfile, UserProfile } from '@/utils/pairing';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 // ============================================
 // TYPES
@@ -39,21 +40,18 @@ interface UseGardenStatusReturn {
   health: FlowerHealth;
   hoursSinceInteraction: number;
   flowers: PlantedFlower[];
-  pendingFlowerSlot: number | null;
-  pendingFlowerPicker: string | null;
-  isMyTurnToPick: boolean; // True if current user triggered level up
-  showLevelUpModal: boolean;
+  decor: PlantedDecor[];
+  landmarks: PlantedLandmark[];
+  wateredByToday: string[]; // Array of userIDs who watered today
+  harmonyState: 'wilt' | 'normal' | 'harmony'; // UI state based on watering
+  canWater: boolean; // True if user can water (6-hour cooldown check)
+  hasPendingHarmonyBonus: boolean; // True if user should see harmony bonus notification
 
   // Actions
-  waterGarden: () => Promise<{ leveledUp: boolean; newSlot: number | null; alreadyWateredToday: boolean }>;
+  waterGarden: () => Promise<{ alreadyWateredToday: boolean; tooSoonToWater: boolean; harmonyBonus: boolean; streakReward: boolean; isWilted?: boolean }>;
   checkAndApplyPunishment: () => Promise<boolean>;
-  selectFlowerForSlot: (flowerType: FlowerTypeId) => Promise<void>;
-  dismissLevelUpModal: () => void;
-
-  // Dev/Test Actions
-  devAddHours: (hours: number) => Promise<void>;
-  devSimulateSend: () => Promise<void>;
   refreshStatus: () => void;
+  clearPendingHarmonyBonus: () => Promise<void>; // Clear pending notification after showing
 }
 
 // ============================================
@@ -79,8 +77,6 @@ export function useGardenStatus(): UseGardenStatusReturn {
   const [gardenState, setGardenState] = useState<GardenState | null>(null);
   const [gardenStatus, setGardenStatus] = useState<GardenStatus>(DEFAULT_STATUS);
   const [isLoading, setIsLoading] = useState(true);
-  const [showLevelUpModal, setShowLevelUpModal] = useState(false);
-  const [pendingSlotFromWatering, setPendingSlotFromWatering] = useState<number | null>(null);
 
   const partnerId = userProfile?.partnerId || null;
   const hasPartner = !!partnerId;
@@ -133,92 +129,78 @@ export function useGardenStatus(): UseGardenStatusReturn {
   }, [gardenState]);
 
   // Water the shared garden (called when sending a letter)
-  // "Gardener of the Day" rule: Only counts once per calendar day
-  const waterGarden = useCallback(async (): Promise<{ leveledUp: boolean; newSlot: number | null; alreadyWateredToday: boolean }> => {
+  // Roommate Model: Checks wallet, tracks wateredByToday, handles harmony bonus
+  const waterGarden = useCallback(async (): Promise<{ alreadyWateredToday: boolean; tooSoonToWater: boolean; harmonyBonus: boolean; streakReward: boolean; isWilted?: boolean }> => {
     if (!user || !partnerId) {
       console.log('[Garden Hook] Cannot water: no partner connected');
-      return { leveledUp: false, newSlot: null, alreadyWateredToday: false };
+      return { alreadyWateredToday: false, tooSoonToWater: false, harmonyBonus: false, streakReward: false, isWilted: false };
     }
 
     try {
       const result = await waterSharedGarden(user.uid, partnerId);
+      // Update state immediately (before subscription fires)
       setGardenState(result.state);
       setGardenStatus(calculateGardenStatus(result.state));
       
-      // Show level up modal ONLY if this user is the picker
-      if (result.leveledUp && result.newSlot !== null && result.state.pendingFlowerPicker === user.uid) {
-        setPendingSlotFromWatering(result.newSlot);
-        setShowLevelUpModal(true);
-      }
+      // Log the updated state
+      const lastWateredByUser = result.state.lastWateredByUser || {};
+      console.log('[Garden Hook] After watering - lastWateredByUser:', JSON.stringify(lastWateredByUser), 'userId:', user.uid, 'userLastWatered:', lastWateredByUser[user.uid] ? lastWateredByUser[user.uid].toMillis() : 'undefined');
       
-      return { leveledUp: result.leveledUp, newSlot: result.newSlot, alreadyWateredToday: result.alreadyWateredToday };
+      return { 
+        alreadyWateredToday: result.alreadyWateredToday,
+        tooSoonToWater: result.tooSoonToWater,
+        harmonyBonus: result.harmonyBonus,
+        streakReward: result.streakReward,
+        isWilted: result.isWilted,
+      };
     } catch (error) {
       console.error('[Garden Hook] Failed to water shared garden:', error);
-      return { leveledUp: false, newSlot: null, alreadyWateredToday: false };
+      return { alreadyWateredToday: false, tooSoonToWater: false, harmonyBonus: false, streakReward: false, isWilted: false };
     }
   }, [user, partnerId]);
 
   // Check if punishment is needed and apply it
+  // Use a ref to track if punishment check is in progress to prevent infinite loops
+  const punishmentCheckInProgress = useRef(false);
+  
   const checkAndApplyPunishment = useCallback(async (): Promise<boolean> => {
     if (!user || !partnerId || !gardenState) return false;
+    
+    // Prevent concurrent punishment checks
+    if (punishmentCheckInProgress.current) {
+      console.log('[Garden Hook] ⚠️ Punishment check already in progress, skipping');
+      return false;
+    }
 
     const status = calculateGardenStatus(gardenState);
 
     if (status.needsPunishment) {
+      punishmentCheckInProgress.current = true;
       try {
         const newState = await applySharedPunishment(user.uid, partnerId);
-        setGardenState(newState);
-        setGardenStatus(calculateGardenStatus(newState));
-        return true;
+        
+        // Only update state if punishment was actually applied (state changed)
+        // applySharedPunishment returns current state if already punished
+        if (newState.coupleConnectionLevel !== gardenState.coupleConnectionLevel || 
+            newState.activeStreakDays !== gardenState.activeStreakDays) {
+          setGardenState(newState);
+          setGardenStatus(calculateGardenStatus(newState));
+          punishmentCheckInProgress.current = false;
+          return true;
+        } else {
+          // Punishment already applied, no state change needed
+          punishmentCheckInProgress.current = false;
+          return false;
+        }
       } catch (error) {
         console.error('[Garden Hook] Failed to apply shared punishment:', error);
+        punishmentCheckInProgress.current = false;
       }
     }
 
     return false;
   }, [user, partnerId, gardenState]);
 
-  // Dev: Simulate time passing (makes lastSuccessfulInteraction older)
-  // This makes the garden appear neglected for X hours
-  const devAddHours = useCallback(
-    async (hours: number) => {
-      if (!user || !partnerId) {
-        console.log('[Garden Hook] Cannot simulate: no partner connected');
-        return;
-      }
-
-      try {
-        await devSimulateTimePassing(user.uid, partnerId, hours);
-        // State will update via subscription, health will recalculate automatically
-      } catch (error) {
-        console.error('[Garden Hook] Failed to simulate time:', error);
-      }
-    },
-    [user, partnerId]
-  );
-
-  // Dev: Simulate sending a letter (bypasses "Gardener of the Day" check)
-  // Allows multiple waterings in a row for testing
-  const devSimulateSend = useCallback(async () => {
-    if (!user || !partnerId) {
-      console.log('[Garden Hook] Cannot water: no partner connected');
-      return;
-    }
-
-    try {
-      const result = await devWaterGarden(user.uid, partnerId);
-      setGardenState(result.state);
-      setGardenStatus(calculateGardenStatus(result.state));
-      
-      // Show level up modal ONLY if this user is the picker
-      if (result.leveledUp && result.newSlot !== null && result.state.pendingFlowerPicker === user.uid) {
-        setShowLevelUpModal(true);
-        setPendingSlotFromWatering(result.newSlot);
-      }
-    } catch (error) {
-      console.error('[Garden Hook] Failed to water garden:', error);
-    }
-  }, [user, partnerId]);
 
   // Manual refresh
   const refreshStatus = useCallback(() => {
@@ -227,53 +209,69 @@ export function useGardenStatus(): UseGardenStatusReturn {
     }
   }, [gardenState]);
 
-  // Select flower type for planting (after level up)
-  // Slot is automatically randomized from available slots
-  const selectFlowerForSlot = useCallback(
-    async (flowerType: FlowerTypeId) => {
-      if (!user || !partnerId) {
-        console.log('[Garden Hook] Cannot plant: no partner connected');
-        return;
-      }
-
-      // Check if we have a pending flower to plant
-      const hasPending = pendingSlotFromWatering !== null || 
-                         (gardenState?.pendingFlowerSlot !== null && gardenState?.pendingFlowerSlot !== undefined);
-      if (!hasPending) {
-        console.log('[Garden Hook] No pending flower to plant');
-        return;
-      }
-
-      try {
-        await plantFlower(user.uid, partnerId, flowerType);
-        setPendingSlotFromWatering(null);
-        setShowLevelUpModal(false);
-        // State will update via subscription
-      } catch (error) {
-        console.error('[Garden Hook] Failed to plant flower:', error);
-      }
-    },
-    [user, partnerId, pendingSlotFromWatering, gardenState?.pendingFlowerSlot]
-  );
-
-  // Dismiss level up modal without selecting
-  const dismissLevelUpModal = useCallback(() => {
-    setShowLevelUpModal(false);
-    // Keep pendingFlowerSlot in state so user can select later
-  }, []);
-
-  // Show modal ONLY if current user is the pending picker
-  // If partner is the picker, they see the modal, we see status text
-  useEffect(() => {
-    if (!user) return;
-    
-    const hasPendingSlot = gardenState?.pendingFlowerSlot !== null && gardenState?.pendingFlowerSlot !== undefined;
-    const isMyTurn = gardenState?.pendingFlowerPicker === user.uid;
-    
-    if (hasPendingSlot && isMyTurn && !showLevelUpModal && pendingSlotFromWatering === null) {
-      setShowLevelUpModal(true);
+  // Calculate harmony state based on wateredByToday and lastWatered
+  const wateredByToday = gardenState?.wateredByToday || [];
+  const harmonyState: 'wilt' | 'normal' | 'harmony' = (() => {
+    // Wilt state: if lastWatered > 24h
+    if (gardenStatus.health === 'wilted') {
+      return 'wilt';
     }
-  }, [user, gardenState?.pendingFlowerSlot, gardenState?.pendingFlowerPicker, showLevelUpModal, pendingSlotFromWatering]);
+    // Harmony state: if both partners watered today
+    if (wateredByToday.length === 2) {
+      return 'harmony';
+    }
+    // Normal state: if one person watered
+    return 'normal';
+  })();
+
+  // Check if user can water (6-hour cooldown)
+  // Recalculate whenever gardenState changes
+  const canWater = useMemo(() => {
+    if (!user || !gardenState) {
+      console.log('[Garden Hook] canWater: false (no user or gardenState)');
+      return false;
+    }
+    const result = canUserWater(gardenState, user.uid);
+    console.log('[Garden Hook] canWater check:', result, 'userId:', user.uid, 'lastWateredByUser:', JSON.stringify(gardenState.lastWateredByUser));
+    return result;
+  }, [user, gardenState]);
+
+  // Check if user has pending harmony bonus notification
+  const hasPendingHarmonyBonus = useMemo(() => {
+    if (!user || !gardenState) {
+      return false;
+    }
+    const pendingHarmonyBonusFor = gardenState.pendingHarmonyBonusFor || [];
+    const hasPending = pendingHarmonyBonusFor.includes(user.uid);
+    if (hasPending) {
+      console.log('[Garden Hook] User has pending harmony bonus notification');
+    }
+    return hasPending;
+  }, [user, gardenState]);
+
+  // Clear pending harmony bonus notification after showing
+  const clearPendingHarmonyBonus = useCallback(async (): Promise<void> => {
+    if (!user || !partnerId || !gardenState) {
+      return;
+    }
+
+    const pendingHarmonyBonusFor = gardenState.pendingHarmonyBonusFor || [];
+    if (!pendingHarmonyBonusFor.includes(user.uid)) {
+      return; // Already cleared or not pending
+    }
+
+    // Remove user from pending list
+    const updatedPending = pendingHarmonyBonusFor.filter(id => id !== user.uid);
+    
+    try {
+      await updateSharedGardenState(user.uid, partnerId, {
+        pendingHarmonyBonusFor: updatedPending,
+      });
+      console.log('[Garden Hook] ✅ Cleared pending harmony bonus notification for user:', user.uid);
+    } catch (error) {
+      console.error('[Garden Hook] Failed to clear pending harmony bonus:', error);
+    }
+  }, [user, partnerId, gardenState]);
 
   return {
     // State
@@ -288,20 +286,17 @@ export function useGardenStatus(): UseGardenStatusReturn {
     health: gardenStatus.health,
     hoursSinceInteraction: gardenStatus.hoursSinceInteraction,
     flowers: gardenState?.flowers || [],
-    pendingFlowerSlot: pendingSlotFromWatering ?? gardenState?.pendingFlowerSlot ?? null,
-    pendingFlowerPicker: gardenState?.pendingFlowerPicker ?? null,
-    isMyTurnToPick: user ? gardenState?.pendingFlowerPicker === user.uid : false,
-    showLevelUpModal,
+    decor: gardenState?.decor || [],
+    landmarks: gardenState?.landmarks || [],
+    wateredByToday,
+    harmonyState,
+    canWater,
+    hasPendingHarmonyBonus,
 
     // Actions
     waterGarden,
     checkAndApplyPunishment,
-    selectFlowerForSlot,
-    dismissLevelUpModal,
-
-    // Dev Actions
-    devAddHours,
-    devSimulateSend,
     refreshStatus,
+    clearPendingHarmonyBonus,
   };
 }

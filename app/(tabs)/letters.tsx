@@ -6,8 +6,9 @@
 
 import { useRouter } from 'expo-router';
 import { Heart, Package, Sparkles } from 'lucide-react-native';
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
   Dimensions,
   Image,
   Platform,
@@ -17,15 +18,16 @@ import {
   Text,
   TouchableOpacity,
   View,
-  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/context/ThemeContext';
-import { Letter, subscribeToLetters, formatLetterDate } from '@/utils/letters';
+import { useColorScheme } from '@/hooks/use-color-scheme';
+import { formatLetterDate, Letter, subscribeToLetters } from '@/utils/letters';
 import { subscribeToUserProfile, UserProfile } from '@/utils/pairing';
+import { getUserAnswer } from '@/utils/questionOfTheDay';
+import { saveToWidget } from '@/utils/widgetStorage';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const HORIZONTAL_PADDING = 20;
@@ -40,22 +42,62 @@ interface LetterCardProps {
   isOutgoing: boolean;
   colors: any; // Theme colors
   senderName?: string; // Name of the sender (for received letters)
+  userId?: string; // Current user's ID
+  router: any; // Router for navigation
   onPress: () => void;
 }
 
-function LetterCard({ letter, isOutgoing, colors, senderName, onPress }: LetterCardProps) {
+function LetterCard({ letter, isOutgoing, colors, senderName, userId, router, onPress }: LetterCardProps) {
   const [imageLoaded, setImageLoaded] = useState(false);
+  const [userHasAnswered, setUserHasAnswered] = useState<boolean | null>(null);
+  const [checkingAnswer, setCheckingAnswer] = useState(false);
   
+  // Check if user has answered the question (for question notifications)
+  useEffect(() => {
+    if (letter.type === 'question' && letter.questionId && userId && !isOutgoing) {
+      setCheckingAnswer(true);
+      getUserAnswer(userId, letter.questionId)
+        .then((answer) => {
+          setUserHasAnswered(!!answer);
+          setCheckingAnswer(false);
+        })
+        .catch((error) => {
+          console.error('Error checking if user answered:', error);
+          setUserHasAnswered(false);
+          setCheckingAnswer(false);
+        });
+    }
+  }, [letter.type, letter.questionId, userId, isOutgoing]);
+
+  // Handle question notification press
+  const handleQuestionPress = () => {
+    if (!letter.questionId || !userId) return;
+    
+    if (isOutgoing) {
+      // User sent the notification - go to history to see both answers
+      router.push('/question-of-the-day?showHistory=true');
+    } else {
+      // Received notification
+      if (userHasAnswered) {
+        // Both have answered - go to history
+        router.push('/question-of-the-day?showHistory=true');
+      } else {
+        // User hasn't answered yet - go to question of the day main page
+        router.push('/question-of-the-day');
+      }
+    }
+  };
+
   // Affection type messages with emojis
   const affectionMessages: Record<string, { text: string; emoji: string }> = {
-    kiss: { text: 'sent you a kiss', emoji: '😘' },
-    hug: { text: 'sent you a hug', emoji: '🤗' },
+    kiss: { text: 'blew a kiss', emoji: '😘' },
+    hug: { text: 'sent a hug', emoji: '🤗' },
     wave: { text: 'waved at you', emoji: '👋' },
-    celebration: { text: 'celebrated with you', emoji: '🎉' },
+    celebration: { text: 'celebrated', emoji: '🎉' },
     tickle: { text: 'tickled you', emoji: '😄' },
-    noseboop: { text: 'gave you a nose boop', emoji: '👆' },
-    cuddle: { text: 'cuddled with you', emoji: '🥰' },
-    pat: { text: 'gave you a pat on the back', emoji: '👏' },
+    noseboop: { text: 'nose booped', emoji: '👆' },
+    cuddle: { text: 'wants to cuddle', emoji: '🥰' },
+    pat: { text: 'gave pats on the back', emoji: '👏' },
   };
 
   // Received = LEFT, Sent by me = RIGHT
@@ -82,6 +124,51 @@ function LetterCard({ letter, isOutgoing, colors, senderName, onPress }: LetterC
             <View style={[styles.unreadDot, { backgroundColor: colors.tint }]} />
           )}
         </View>
+      ) : letter.type === 'question' ? (
+        // Question of the day notification card
+        <TouchableOpacity
+          style={[styles.affectionCard, { backgroundColor: colors.cardBackground }]}
+          onPress={handleQuestionPress}
+          activeOpacity={0.7}
+          disabled={checkingAnswer}
+        >
+          {checkingAnswer ? (
+            <ActivityIndicator size="small" color={colors.tint} style={{ marginBottom: 8 }} />
+          ) : (
+            <>
+              <Text style={[styles.affectionText, { color: colors.text }]}>
+                {isOutgoing 
+                  ? `You just answered question of the day 💭`
+                  : (() => {
+                      if (userHasAnswered) {
+                        return `${senderName || 'They'} also just answered question of the day 💭`;
+                      } else {
+                        return `${senderName || 'They'} is the first one to answer question of the day 💭`;
+                      }
+                    })()}
+              </Text>
+              <Text style={[styles.affectionDate, { color: colors.textSecondary }]}>
+                {formatLetterDate(letter.timestamp)}
+              </Text>
+              {!isOutgoing && (
+                <TouchableOpacity
+                  style={[styles.questionButton, { backgroundColor: colors.tint }]}
+                  onPress={handleQuestionPress}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.questionButtonText}>
+                    {userHasAnswered 
+                      ? 'See what you both answered'
+                      : 'Click here to answer as well'}
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </>
+          )}
+          {!letter.isRead && !isOutgoing && (
+            <View style={[styles.unreadDot, { backgroundColor: colors.tint }]} />
+          )}
+        </TouchableOpacity>
       ) : (
         // Widget update card
         <TouchableOpacity
@@ -181,6 +268,35 @@ function LoadingState({ colors }: { colors: any }) {
   );
 }
 
+/**
+ * Update widget with the latest received letter (iOS only)
+ * This ensures the widget always shows the most recent drawing received
+ */
+async function updateWidgetWithLatestReceivedLetter(letters: Letter[], currentUserId: string) {
+  // Update widget for both iOS and Android when receiving a letter
+  try {
+    // Find the latest received letter (not sent by current user)
+    const receivedLetters = letters
+      .filter(letter => letter.receiverId === currentUserId && letter.type === 'widget' && letter.imageUrl)
+      .sort((a, b) => {
+        const timeA = a.timestamp?.toMillis?.() || 0;
+        const timeB = b.timestamp?.toMillis?.() || 0;
+        return timeB - timeA; // Newest first
+      });
+    
+    if (receivedLetters.length > 0) {
+      const latestLetter = receivedLetters[0];
+      if (latestLetter.imageUrl) {
+        await saveToWidget(latestLetter.imageUrl, false); // false = this is from receiver (always update)
+        console.log('[Letters] ✅ Widget updated with latest received letter');
+      }
+    }
+  } catch (error) {
+    console.warn('[Letters] Failed to update widget:', error);
+    // Don't throw - this is non-critical
+  }
+}
+
 // ============================================
 // MAIN SCREEN
 // ============================================
@@ -190,6 +306,7 @@ export default function LettersScreen() {
   const { user } = useAuth();
   const colorScheme = useColorScheme();
   const { colors: themeColors } = useTheme();
+  // Colors already have visual theme applied globally in ThemeContext
   const colors = themeColors[colorScheme ?? 'light'];
   const scrollViewRef = useRef<ScrollView>(null);
   
@@ -224,6 +341,11 @@ export default function LettersScreen() {
       (fetchedLetters) => {
         setLetters(fetchedLetters);
         setIsLoading(false);
+        
+        // Update widget with latest received letter (iOS only)
+        if (Platform.OS === 'ios') {
+          updateWidgetWithLatestReceivedLetter(fetchedLetters, user.uid);
+        }
       }
     );
 
@@ -317,6 +439,8 @@ export default function LettersScreen() {
                     letter={letter}
                     isOutgoing={isOutgoing}
                     senderName={senderName}
+                    userId={user?.uid}
+                    router={router}
                     colors={colors}
                     onPress={() => handleLetterPress(letter)}
                   />
@@ -485,6 +609,19 @@ const styles = StyleSheet.create({
   affectionDate: {
     fontSize: 12,
     fontWeight: '400',
+    marginBottom: 8,
+  },
+  questionButton: {
+    marginTop: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 12,
+    alignSelf: 'flex-start',
+  },
+  questionButtonText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '600',
   },
   placeholderArea: {
     flex: 1,

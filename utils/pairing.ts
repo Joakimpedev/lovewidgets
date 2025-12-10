@@ -38,7 +38,40 @@ export interface UserProfile {
   isPremium: boolean;               // Premium subscription status
   createdAt: any;
   updatedAt: any;
+  firstConnectedAt: any | null;     // Timestamp of first connection (persists through disconnects)
+  
+  // Resource-Based Economy (Wallet System)
+  wallet?: {
+    gold: number;
+    water: number;
+    maxWater: number; // Default 3
+  };
+  garden?: {
+    currentPlantId: string | null; // e.g., 'basic_daisy' (null if not selected yet)
+    isWilted: boolean;
+    streakDays: number;
+    lastWatered: any | null; // Timestamp
+    lastWaterEarned: any | null; // Timestamp (for daily cap)
+  };
+  ownedThemes?: string[]; // Array of theme IDs the user owns (e.g., ['default', 'space_mode'])
+  scrapbook?: ScrapbookMemory[]; // Array of preserved garden memories
 }
+
+// ============================================
+// SCRAPBOOK TYPES
+// ============================================
+
+export interface ScrapbookMemory {
+  id: string; // Unique ID for this memory
+  title: string; // User-provided title (e.g., "Our First Month")
+  date: string; // ISO date string when memory was created
+  themeId: string; // Visual theme ID (e.g., 'default', 'space_mode')
+  gardenSnapshot: PlantedFlower[]; // Snapshot of flowers at time of preservation
+  landmarkSnapshot: PlantedLandmark[]; // Snapshot of landmarks at time of preservation
+}
+
+// Import types from gardenState
+import type { PlantedFlower, PlantedLandmark } from './gardenState';
 
 export interface ConnectionRequest {
   id?: string;
@@ -98,6 +131,20 @@ export async function createUserProfile(
     isPremium: false, // Default to free
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
+    firstConnectedAt: null, // Set when first connection is made
+    // Initialize wallet and garden with defaults
+    wallet: {
+      gold: 0,
+      water: 0,
+      maxWater: 3,
+    },
+    garden: {
+      currentPlantId: null,
+      isWilted: false,
+      streakDays: 0,
+      lastWatered: null,
+      lastWaterEarned: null,
+    },
   };
 
   await setDoc(doc(db, 'users', userId), profile);
@@ -298,20 +345,32 @@ export async function acceptConnectionRequest(
   const fromUserData = fromUserDoc.data();
   const toUserData = toUserDoc.data();
 
-  // Update both users' profiles to link them and sync photos
-  await updateDoc(doc(db, 'users', request.fromUserId), {
+  // Prepare update data for both users
+  const fromUserUpdate: any = {
     partnerId: request.toUserId,
     partnerName: request.toUserName,
     partnerPhotoURL: toUserData?.photoURL || null, // Sync partner's photo
     updatedAt: serverTimestamp(),
-  });
+  };
 
-  await updateDoc(doc(db, 'users', request.toUserId), {
+  const toUserUpdate: any = {
     partnerId: request.fromUserId,
     partnerName: request.fromUserName,
     partnerPhotoURL: fromUserData?.photoURL || null, // Sync partner's photo
     updatedAt: serverTimestamp(),
-  });
+  };
+
+  // Set firstConnectedAt only if it doesn't exist (first time connecting)
+  if (!fromUserData?.firstConnectedAt) {
+    fromUserUpdate.firstConnectedAt = serverTimestamp();
+  }
+  if (!toUserData?.firstConnectedAt) {
+    toUserUpdate.firstConnectedAt = serverTimestamp();
+  }
+
+  // Update both users' profiles to link them and sync photos
+  await updateDoc(doc(db, 'users', request.fromUserId), fromUserUpdate);
+  await updateDoc(doc(db, 'users', request.toUserId), toUserUpdate);
 
   // Delete the request
   await deleteDoc(doc(db, 'requests', requestId));

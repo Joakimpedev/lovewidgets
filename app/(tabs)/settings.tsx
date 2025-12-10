@@ -45,6 +45,8 @@ import {
   X,
   Send,
   Camera,
+  AlertCircle,
+  Sparkles,
 } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -53,7 +55,7 @@ import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useAuth } from '@/context/AuthContext';
 import { useTheme, ThemeId } from '@/context/ThemeContext';
-import { getUserProfile } from '@/utils/storage';
+import { getUserProfile, getOnboardingState, setOnboardingState } from '@/utils/storage';
 import {
   generateInviteCode,
   findUserByInviteCode,
@@ -70,6 +72,9 @@ import {
   UserProfile as FirestoreProfile,
   ConnectionRequest,
 } from '@/utils/pairing';
+import { resetTodaysQuestionStatus } from '@/utils/questionOfTheDay';
+import { doc, updateDoc, serverTimestamp, Timestamp } from 'firebase/firestore';
+import { db } from '@/config/firebaseConfig';
 
 // ============================================
 // CONSTANTS
@@ -174,6 +179,7 @@ function IdentityCard({ children, colors }: IdentityCardProps) {
 export default function ProfileScreen() {
   const colorScheme = useColorScheme();
   const { themeId, setTheme, colors: themeColors } = useTheme();
+  // Colors already have visual theme applied globally in ThemeContext
   const colors = themeColors[colorScheme ?? 'light'];
   const { user, signOut } = useAuth();
   const router = useRouter();
@@ -500,6 +506,179 @@ export default function ProfileScreen() {
   // Edit profile
   function handleEditProfile() {
     Alert.alert('Edit Profile', 'Profile editing will be available soon!');
+  }
+
+  // DEV: Reset question of the day
+  async function handleDevResetQuestion() {
+    if (!user?.uid) return;
+
+    Alert.alert(
+      'DEV: Reset Question of the Day',
+      'This will reset your reveal status and answer for today\'s question. The question will remain the same.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Reset',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await resetTodaysQuestionStatus(user.uid);
+              Alert.alert('Success', 'Question of the day has been reset!');
+            } catch (error) {
+              console.error('Error resetting question:', error);
+              Alert.alert('Error', 'Failed to reset question. Please try again.');
+            }
+          },
+        },
+      ]
+    );
+  }
+
+  // DEV: Reset theme purchases
+  async function handleDevResetThemes() {
+    if (!user?.uid) return;
+
+    Alert.alert(
+      'DEV: Reset Theme Purchases',
+      'This will reset all purchased themes. Only the default theme will remain. You can purchase themes again.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Reset',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const userDocRef = doc(db, 'users', user.uid);
+              await updateDoc(userDocRef, {
+                'ownedThemes': ['default'],
+                updatedAt: serverTimestamp(),
+              });
+              Alert.alert('Success', 'Theme purchases have been reset!');
+            } catch (error) {
+              console.error('Error resetting themes:', error);
+              Alert.alert('Error', 'Failed to reset themes. Please try again.');
+            }
+          },
+        },
+      ]
+    );
+  }
+
+  // DEV: Reset first plant flags
+  async function handleDevResetFirstPlants() {
+    if (!user?.uid || !firestoreProfile?.partnerId) {
+      Alert.alert('Error', 'You must be connected to a partner to use this tool.');
+      return;
+    }
+
+    Alert.alert(
+      'DEV: Reset First Plant Flags',
+      'This will reset the first plant flags so you can see the first plant modals again for each category.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Reset',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const { updateSharedGardenState } = await import('@/utils/gardenState');
+              await updateSharedGardenState(user.uid, firestoreProfile.partnerId, {
+                firstPlantFlower: false,
+                firstPlantLargePlant: false,
+                firstPlantTree: false,
+              });
+              Alert.alert('Success', 'First plant flags have been reset!');
+            } catch (error) {
+              console.error('Error resetting first plant flags:', error);
+              Alert.alert('Error', 'Failed to reset first plant flags. Please try again.');
+            }
+          },
+        },
+      ]
+    );
+  }
+
+  // DEV: Set garden to wilted state (24+ hours ago)
+  async function handleDevSetWilted() {
+    if (!user?.uid || !firestoreProfile?.partnerId) {
+      Alert.alert('Error', 'You must be connected to a partner to use this tool.');
+      return;
+    }
+
+    Alert.alert(
+      'DEV: Set Garden to Wilted State',
+      'This will set the garden to wilted state by setting lastSuccessfulInteraction to 25 hours ago. This allows you to test the wilted revival modal.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Set Wilted',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const { updateSharedGardenState } = await import('@/utils/gardenState');
+              // Set lastSuccessfulInteraction to 25 hours ago (ensures wilted state)
+              const now = Date.now();
+              const twentyFiveHoursAgo = now - (25 * 60 * 60 * 1000);
+              await updateSharedGardenState(user.uid, firestoreProfile.partnerId, {
+                lastSuccessfulInteraction: Timestamp.fromMillis(twentyFiveHoursAgo),
+              });
+              Alert.alert('Success', 'Garden has been set to wilted state! Try watering to see the revival modal.');
+            } catch (error) {
+              console.error('Error setting garden to wilted:', error);
+              Alert.alert('Error', 'Failed to set garden to wilted state. Please try again.');
+            }
+          },
+        },
+      ]
+    );
+  }
+
+  // DEV: Reset onboarding state
+  async function handleDevResetOnboarding() {
+    if (!user?.uid) {
+      Alert.alert('Error', 'You must be logged in to use this tool.');
+      return;
+    }
+
+    Alert.alert(
+      'DEV: Reset Onboarding State',
+      'This will reset all onboarding flags. If you are already connected, you will see the "Linked! ❤️" tutorial message.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Reset Onboarding',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              // Reset all onboarding flags
+              await setOnboardingState({
+                isConnected: false,
+                hasCompletedTutorial: false,
+                hasPlantedFirstFlower: false,
+                hasReceivedStarterBudget: false,
+              });
+
+              // If user is already connected, mark as connected but keep tutorial incomplete
+              // This will trigger Step 2 (the "Linked!" message)
+              if (firestoreProfile?.partnerId) {
+                await setOnboardingState({
+                  isConnected: true,
+                  hasCompletedTutorial: false, // Keep this false to trigger tutorial
+                  hasPlantedFirstFlower: false,
+                  hasReceivedStarterBudget: false,
+                });
+                Alert.alert('Success', 'Onboarding state reset! Navigate to home to see the tutorial.');
+              } else {
+                Alert.alert('Success', 'Onboarding state reset! You will see the welcome overlay when you go to home.');
+              }
+            } catch (error) {
+              console.error('Error resetting onboarding:', error);
+              Alert.alert('Error', 'Failed to reset onboarding state. Please try again.');
+            }
+          },
+        },
+      ]
+    );
   }
 
   // DEV: Reset everything
@@ -927,6 +1106,51 @@ export default function ProfileScreen() {
         {/* DEV TOOLS */}
         {/* ============================================ */}
         <Text style={[styles.sectionTitle, { color: colors.error }]}>Developer</Text>
+
+        <TouchableOpacity
+          style={[styles.devResetButton, { backgroundColor: colors.tint }]}
+          onPress={handleDevResetQuestion}
+          activeOpacity={0.8}
+        >
+          <Clock size={20} color="#FFFFFF" />
+          <Text style={styles.devResetButtonText}>DEV: Reset Question of the Day</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.devResetButton, { backgroundColor: '#A78BDE' }]}
+          onPress={handleDevResetThemes}
+          activeOpacity={0.8}
+        >
+          <Palette size={20} color="#FFFFFF" />
+          <Text style={styles.devResetButtonText}>DEV: Reset Theme Purchases</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.devResetButton, { backgroundColor: '#7BC87B' }]}
+          onPress={handleDevResetFirstPlants}
+          activeOpacity={0.8}
+        >
+          <Clock size={20} color="#FFFFFF" />
+          <Text style={styles.devResetButtonText}>DEV: Reset First Plant Flags</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.devResetButton, { backgroundColor: '#8D6E63' }]}
+          onPress={handleDevSetWilted}
+          activeOpacity={0.8}
+        >
+          <AlertCircle size={20} color="#FFFFFF" />
+          <Text style={styles.devResetButtonText}>DEV: Set Garden to Wilted</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.devResetButton, { backgroundColor: '#FF9500' }]}
+          onPress={handleDevResetOnboarding}
+          activeOpacity={0.8}
+        >
+          <Sparkles size={20} color="#FFFFFF" />
+          <Text style={styles.devResetButtonText}>DEV: Reset Onboarding State</Text>
+        </TouchableOpacity>
 
         <TouchableOpacity
           style={[styles.devResetButton, { backgroundColor: colors.error }]}
