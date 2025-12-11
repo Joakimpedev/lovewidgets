@@ -139,12 +139,74 @@ function withIOSWidget(config) {
     const swiftFilePath = path.join(platformProjectRoot, WIDGET_TARGET_NAME, 'LoveWidget.swift');
     const plistFilePath = path.join(platformProjectRoot, WIDGET_TARGET_NAME, 'Info.plist');
     
+    // NEW CODE - MANUALLY ADDS FILE REFERENCE AND ENSURES IT'S ADDED TO THE SOURCES BUILD PHASE
+        // NEW CODE - MANUALLY ADDS FILE REFERENCE AND ENSURES IT'S ADDED TO THE SOURCES BUILD PHASE
     if (fs.existsSync(swiftFilePath)) {
-      const swiftFileRef = project.addSourceFile(`${WIDGET_TARGET_NAME}/LoveWidget.swift`, {
-        target: WIDGET_TARGET_NAME,
-        compilerFlags: '',
+      const swiftPath = `${WIDGET_TARGET_NAME}/LoveWidget.swift`;
+      
+      // 1. Add the file reference to the project
+      let swiftFileRef = project.addFile(swiftPath, widgetGroup.uuid, {
+        lastKnownFileType: 'sourcecode.swift'
       });
-      project.addToPbxGroup(swiftFileRef.uuid, widgetGroup.uuid);
+      
+      // Need to normalize the fileRef structure if addFile returns non-standard
+      if (typeof swiftFileRef !== 'object' || !swiftFileRef.uuid) {
+        const swiftFileRefKey = project.hash.project.files.find(file => file.path === swiftPath)?.value;
+        swiftFileRef = project.hash.project.objects.PBXFileReference[swiftFileRefKey];
+      }
+      
+      // 2. Manually add the build file to the Widget Target's Sources Build Phase
+      if (swiftFileRef && swiftFileRef.uuid) {
+        // Get the build phase UUID properly from the target's build phases array
+        const widgetTarget = project.pbxNativeTargetSection()[widgetTargetUuid];
+        const sourcesBuildPhaseUuid = widgetTarget.buildPhases.find(phase => {
+          const phaseObj = project.pbxSourcesBuildPhaseSection()[phase.value];
+          return phaseObj && phaseObj.isa === 'PBXSourcesBuildPhase';
+        })?.value;
+        
+        if (sourcesBuildPhaseUuid) {
+          // Create PBXBuildFile entry manually
+          const buildFileUuid = project.generateUuid();
+          const buildFile = {
+            isa: 'PBXBuildFile',
+            fileRef: swiftFileRef.uuid,
+            fileRef_comment: 'LoveWidget.swift'
+          };
+          
+          // Add to PBXBuildFile section
+          if (!project.hash.project.objects.PBXBuildFile) {
+            project.hash.project.objects.PBXBuildFile = {};
+          }
+          project.hash.project.objects.PBXBuildFile[buildFileUuid] = buildFile;
+          
+          // Add to Sources Build Phase files array
+          const sourcesBuildPhase = project.pbxSourcesBuildPhaseSection()[sourcesBuildPhaseUuid];
+          if (!sourcesBuildPhase.files) {
+            sourcesBuildPhase.files = [];
+          }
+          
+          // Check if already added
+          const alreadyAdded = sourcesBuildPhase.files.some(file => {
+            const fileUuid = file.value || file;
+            const fileObj = project.hash.project.objects.PBXBuildFile[fileUuid];
+            return fileObj && fileObj.fileRef === swiftFileRef.uuid;
+          });
+          
+          if (!alreadyAdded) {
+            sourcesBuildPhase.files.push({
+              value: buildFileUuid,
+              comment: 'LoveWidget.swift in Sources'
+            });
+            console.log('[withIOSWidget] Successfully added LoveWidget.swift to Sources Build Phase.');
+          } else {
+            console.log('[withIOSWidget] LoveWidget.swift already in Sources Build Phase.');
+          }
+        } else {
+          console.error('[withIOSWidget] FAILED TO FIND SOURCES BUILD PHASE UUID FOR WIDGET TARGET.');
+        }
+      } else {
+        console.error('[withIOSWidget] FAILED TO GET FILE REFERENCE FOR LoveWidget.swift.');
+      }
     }
 
     if (fs.existsSync(plistFilePath)) {
