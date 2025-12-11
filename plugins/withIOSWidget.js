@@ -124,15 +124,21 @@ console.log(`[withIOSWidget] Found main app target: ${mainAppTargetName}`);
     
     const widgetTargetUuid = widgetTargetObj.uuid;
 
-    // Set build settings for widget target
-    project.addBuildProperty('PRODUCT_BUNDLE_IDENTIFIER', WIDGET_BUNDLE_ID, null, WIDGET_TARGET_NAME);
-    project.addBuildProperty('IPHONEOS_DEPLOYMENT_TARGET', DEPLOYMENT_TARGET, null, WIDGET_TARGET_NAME);
-    project.addBuildProperty('SWIFT_VERSION', '5.0', null, WIDGET_TARGET_NAME);
-    project.addBuildProperty('TARGETED_DEVICE_FAMILY', '1,2', null, WIDGET_TARGET_NAME);
-    project.addBuildProperty('SKIP_INSTALL', 'YES', null, WIDGET_TARGET_NAME);
-    project.addBuildProperty('INFOPLIST_FILE', `${WIDGET_TARGET_NAME}/Info.plist`, null, WIDGET_TARGET_NAME);
-    project.addBuildProperty('CODE_SIGN_ENTITLEMENTS', `${WIDGET_TARGET_NAME}/${WIDGET_TARGET_NAME}.entitlements`, null, WIDGET_TARGET_NAME);
-
+   // Set build settings for widget target - explicitly set for both Debug and Release
+project.addBuildProperty('PRODUCT_BUNDLE_IDENTIFIER', WIDGET_BUNDLE_ID, 'Debug', WIDGET_TARGET_NAME);
+project.addBuildProperty('PRODUCT_BUNDLE_IDENTIFIER', WIDGET_BUNDLE_ID, 'Release', WIDGET_TARGET_NAME);
+project.addBuildProperty('IPHONEOS_DEPLOYMENT_TARGET', DEPLOYMENT_TARGET, 'Debug', WIDGET_TARGET_NAME);
+project.addBuildProperty('IPHONEOS_DEPLOYMENT_TARGET', DEPLOYMENT_TARGET, 'Release', WIDGET_TARGET_NAME);
+project.addBuildProperty('SWIFT_VERSION', '5.0', 'Debug', WIDGET_TARGET_NAME);
+project.addBuildProperty('SWIFT_VERSION', '5.0', 'Release', WIDGET_TARGET_NAME);
+project.addBuildProperty('TARGETED_DEVICE_FAMILY', '1,2', 'Debug', WIDGET_TARGET_NAME);
+project.addBuildProperty('TARGETED_DEVICE_FAMILY', '1,2', 'Release', WIDGET_TARGET_NAME);
+project.addBuildProperty('SKIP_INSTALL', 'YES', 'Debug', WIDGET_TARGET_NAME);
+project.addBuildProperty('SKIP_INSTALL', 'YES', 'Release', WIDGET_TARGET_NAME);
+project.addBuildProperty('INFOPLIST_FILE', `${WIDGET_TARGET_NAME}/Info.plist`, 'Debug', WIDGET_TARGET_NAME);
+project.addBuildProperty('INFOPLIST_FILE', `${WIDGET_TARGET_NAME}/Info.plist`, 'Release', WIDGET_TARGET_NAME);
+project.addBuildProperty('CODE_SIGN_ENTITLEMENTS', `${WIDGET_TARGET_NAME}/${WIDGET_TARGET_NAME}.entitlements`, 'Debug', WIDGET_TARGET_NAME);
+project.addBuildProperty('CODE_SIGN_ENTITLEMENTS', `${WIDGET_TARGET_NAME}/${WIDGET_TARGET_NAME}.entitlements`, 'Release', WIDGET_TARGET_NAME);
     // Add frameworks
     project.addFramework('WidgetKit.framework', { target: WIDGET_TARGET_NAME, customFramework: false });
     project.addFramework('SwiftUI.framework', { target: WIDGET_TARGET_NAME, customFramework: false });
