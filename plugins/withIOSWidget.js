@@ -85,13 +85,19 @@ function withIOSWidget(config) {
     const projectPath = config.modRequest.projectPath;
     const platformProjectRoot = config.modRequest.platformProjectRoot;
 
-    const mainAppTargetName = 'LoveWidgets';
-    const mainAppTarget = project.getTarget(mainAppTargetName);
-    
-    if (!mainAppTarget) {
-      console.warn(`[withIOSWidget] Main app target "${mainAppTargetName}" not found`);
-      return config;
-    }
+    // Try to find the main app target (could be named differently)
+const pbxNativeTargets = project.pbxNativeTargetSection();
+const mainAppTarget = Object.keys(pbxNativeTargets)
+  .map(key => pbxNativeTargets[key])
+  .find(target => target && target.productType === '"com.apple.product-type.application"');
+
+if (!mainAppTarget) {
+  console.warn('[withIOSWidget] Main app target not found');
+  return config;
+}
+
+const mainAppTargetName = mainAppTarget.name;
+console.log(`[withIOSWidget] Found main app target: ${mainAppTargetName}`);
 
     // Check if widget target already exists
     const existingWidgetTarget = project.getTarget(WIDGET_TARGET_NAME);
