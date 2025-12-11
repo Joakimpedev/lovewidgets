@@ -1,58 +1,113 @@
-//
-//  LoveWidget.swift
-//  LoveWidgets Widget Extension
-//
-//  Bulletproof "Hello World" to test installation.
-//
-
 import WidgetKit
 import SwiftUI
 
 struct Provider: TimelineProvider {
     func placeholder(in context: Context) -> SimpleEntry {
-        SimpleEntry(date: Date())
+        SimpleEntry(date: Date(), imageData: nil)
     }
-
+    
     func getSnapshot(in context: Context, completion: @escaping (SimpleEntry) -> ()) {
-        let entry = SimpleEntry(date: Date())
+        let entry = SimpleEntry(date: Date(), imageData: getWidgetImage())
         completion(entry)
     }
-
+    
     func getTimeline(in context: Context, completion: @escaping (Timeline<Entry>) -> ()) {
-        let entry = SimpleEntry(date: Date())
-        let timeline = Timeline(entries: [entry], policy: .atEnd)
+        let currentDate = Date()
+        let entry = SimpleEntry(date: currentDate, imageData: getWidgetImage())
+        
+        let nextUpdate = Calendar.current.date(byAdding: .minute, value: 5, to: currentDate)!
+        let timeline = Timeline(entries: [entry], policy: .after(nextUpdate))
         completion(timeline)
+    }
+    
+    private func getWidgetImage() -> String? {
+        if let sharedDefaults = UserDefaults(suiteName: "group.com.lovewidgets.data") {
+            return sharedDefaults.string(forKey: "@widget_image")
+        }
+        return nil
     }
 }
 
 struct SimpleEntry: TimelineEntry {
     let date: Date
+    let imageData: String?
 }
 
 struct LoveWidgetEntryView : View {
     var entry: Provider.Entry
-
+    
     var body: some View {
-        ZStack {
-            Color.pink.opacity(0.2)
-            Text("IT WORKS!")
-                .font(.largeTitle)
-                .fontWeight(.bold)
-                .foregroundColor(.pink)
+        if let imageData = entry.imageData, 
+           let image = decodeBase64Image(imageData) {
+            Image(uiImage: image)
+                .resizable()
+                .aspectRatio(contentMode: .fill)
+                .clipped()
+        } else {
+            ZStack {
+                LinearGradient(
+                    colors: [
+                        Color(red: 1.0, green: 0.9, blue: 0.95),
+                        Color(red: 0.98, green: 0.85, blue: 0.95)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+                
+                VStack(spacing: 16) {
+                    HStack(spacing: 4) {
+                        Text("✨")
+                            .font(.system(size: 24))
+                        Image(systemName: "heart.fill")
+                            .font(.system(size: 44))
+                            .foregroundColor(Color.pink.opacity(0.6))
+                        Text("✨")
+                            .font(.system(size: 24))
+                    }
+                    
+                    VStack(spacing: 8) {
+                        Text("Your partner's")
+                            .font(.system(size: 15, weight: .medium))
+                            .foregroundColor(Color.pink.opacity(0.8))
+                        Text("drawing will")
+                            .font(.system(size: 15, weight: .medium))
+                            .foregroundColor(Color.pink.opacity(0.8))
+                        Text("appear here 💕")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundColor(Color.pink)
+                    }
+                }
+            }
         }
+    }
+    
+    private func decodeBase64Image(_ base64String: String) -> UIImage? {
+        let base64Data: String
+        if base64String.hasPrefix("data:") {
+            let components = base64String.components(separatedBy: ",")
+            base64Data = components.count > 1 ? components[1] : base64String
+        } else {
+            base64Data = base64String
+        }
+        
+        guard let data = Data(base64Encoded: base64Data, options: .ignoreUnknownCharacters) else {
+            return nil
+        }
+        
+        return UIImage(data: data)
     }
 }
 
 @main
 struct LoveWidget: Widget {
     let kind: String = "LoveWidget"
-
+    
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: kind, provider: Provider()) { entry in
             LoveWidgetEntryView(entry: entry)
         }
-        .configurationDisplayName("Debug Widget")
-        .description("If you can see this, the installation worked.")
-        .supportedFamilies([.systemSmall, .systemMedium])
+        .configurationDisplayName("Partner Drawing")
+        .description("Your partner's latest drawing appears here automatically 💕")
+        .supportedFamilies([.systemSmall, .systemLarge])
     }
 }
