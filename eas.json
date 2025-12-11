@@ -21,7 +21,8 @@
       },
       "ios": {
         "simulator": false,
-        "buildConfiguration": "Release"
+        "buildConfiguration": "Release",
+        "prebuildCommand": "npx expo prebuild --platform ios"
       }
     },
     "production": {
@@ -30,7 +31,8 @@
       },
       "ios": {
         "simulator": false,
-        "buildConfiguration": "Release"
+        "buildConfiguration": "Release",
+        "prebuildCommand": "npx expo prebuild --platform ios"
       }
     }
   },
@@ -41,4 +43,3 @@
     }
   }
 }
-
