@@ -70,34 +70,31 @@ export async function saveToWidget(imageUrl: string, isFromSender: boolean = fal
   }
   try {
     if (Platform.OS === 'ios') {
-      // iOS: Save to App Group shared container
-      if (!SharedGroupPreferences || !SharedGroupPreferences.setItem) {
-        console.warn('[WidgetStorage] SharedGroupPreferences not available - widget may not update');
-        // Still save to AsyncStorage as backup (widget won't read it, but at least we have the data)
-        await AsyncStorage.setItem(WIDGET_STORAGE_KEY, imageUrl);
-        return;
-      }
-
-      try {
-        await SharedGroupPreferences.setItem(WIDGET_STORAGE_KEY, imageUrl, IOS_APP_GROUP);
-        console.log('[WidgetStorage] ✅ iOS: Saved to App Group successfully');
-        console.log('[WidgetStorage] Image data length:', imageUrl.length);
-        
-        // Reload widget after saving
-        await reloadWidget();
-      } catch (error: any) {
-        console.error('[WidgetStorage] ❌ iOS App Group save failed:', error?.message || error);
-        console.error('[WidgetStorage] Error details:', error);
-        
-        // Fallback to AsyncStorage (widget won't read it, but we have the data)
+      // iOS: Save to App Group via native WidgetModule
+      if (WidgetModule && WidgetModule.saveWidgetData) {
         try {
-          await AsyncStorage.setItem(WIDGET_STORAGE_KEY, imageUrl);
-          console.log('[WidgetStorage] Saved to AsyncStorage as fallback (widget cannot read this)');
-        } catch (asyncError: any) {
-          console.error('[WidgetStorage] AsyncStorage fallback also failed:', asyncError?.message);
-          // Don't throw - allow the drawing to still be sent to partner
+          await WidgetModule.saveWidgetData(WIDGET_STORAGE_KEY, imageUrl);
+          console.log('[WidgetStorage] ✅ iOS: Saved to App Group via WidgetModule successfully');
+          console.log('[WidgetStorage] Image data length:', imageUrl.length);
+          // Widget reload is already triggered in the native module
+          return;
+        } catch (error: any) {
+          console.error('[WidgetStorage] ❌ iOS WidgetModule save failed:', error?.message || error);
+          console.error('[WidgetStorage] Error details:', error);
+          
+          // Fallback to AsyncStorage (widget won't read it, but we have the data)
+          try {
+            await AsyncStorage.setItem(WIDGET_STORAGE_KEY, imageUrl);
+            console.log('[WidgetStorage] Saved to AsyncStorage as fallback (widget cannot read this)');
+          } catch (asyncError: any) {
+            console.error('[WidgetStorage] AsyncStorage fallback also failed:', asyncError?.message);
+          }
         }
+      } else {
+        console.warn('[WidgetStorage] WidgetModule not available - saving to AsyncStorage as fallback');
+        await AsyncStorage.setItem(WIDGET_STORAGE_KEY, imageUrl);
       }
+    
     } else if (Platform.OS === 'android') {
       // Android: Save via native module to SharedPreferences
       if (WidgetStorageModule && WidgetStorageModule.saveWidgetData) {
