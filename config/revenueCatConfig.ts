@@ -8,8 +8,8 @@ import Purchases, { LOG_LEVEL, PURCHASES_ERROR_CODE } from 'react-native-purchas
 
 // RevenueCat API Keys
 // Test keys for development - replace with production keys when ready
-const iosApiKey = 'test_WABABdxbXmqtoJAXJwHMWfSClyg';
-const androidApiKey = 'test_WABABdxbXmqtoJAXJwHMWfSClyg';
+const iosApiKey = 'appl_bqCukUABBysiPKefpOdFBHDoZyA';
+const androidApiKey = 'goog_WSQwSOPEXUwAuDoNVXnWXvzOUTM';
 
 let isInitialized = false;
 
