@@ -18,7 +18,7 @@
         ],
         "aps-environment": "development"
       },
-      "buildNumber": "1",
+      "buildNumber": "2",
       "infoPlist": {
         "NSPhotoLibraryUsageDescription": "LoveWidgets needs access to your photos to set your profile picture and add images to your scrapbook.",
         "NSPhotoLibraryAddUsageDescription": "LoveWidgets needs permission to save images to your photo library when you share creations.",

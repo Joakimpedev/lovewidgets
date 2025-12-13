@@ -454,13 +454,19 @@ function SignInStep({
 
           {/* Apple Sign In (iOS only) */}
           {Platform.OS === 'ios' && !isLoading && (
-            <AppleAuthentication.AppleAuthenticationButton
-              buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
-              buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
-              cornerRadius={14}
-              style={styles.appleButton}
-              onPress={onSignInWithApple}
-            />
+            <>
+              <AppleAuthentication.AppleAuthenticationButton
+                buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
+                buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
+                cornerRadius={14}
+                style={styles.appleButton}
+                onPress={onSignInWithApple}
+              />
+              {/* Show error if it's related to Apple Sign In */}
+              {error && (error.includes('Apple') || error.includes('development build') || error.includes('Sign in with Apple')) && (
+                <Text style={styles.authError}>{error}</Text>
+              )}
+            </>
           )}
         </View>
 
@@ -638,13 +644,30 @@ export default function OnboardingScreen() {
       // Navigation will be handled by the auth state change in _layout.tsx
     } catch (err: any) {
       console.error('Error during Apple sign-in:', err);
-      // Don't show error if user canceled
-      if (err?.message?.includes('canceled')) {
-        setError('');
-      } else {
-        setError(err?.message || 'Failed to sign in with Apple. Please try again.');
-      }
       setIsLoading(false);
+      
+      // Don't show error if user canceled
+      if (err?.message?.includes('canceled') || err?.code === 'ERR_CANCELED') {
+        setError('');
+        return; // User canceled, just return without showing error
+      }
+      
+      // Show helpful error message
+      let errorMessage = 'Failed to sign in with Apple. ';
+      if (err?.message?.includes('not available') || err?.message?.includes('development build')) {
+        errorMessage += 'Make sure you are using a development build (not Expo Go) and testing on a real device.';
+      } else if (err?.message?.includes('unknown reason') || err?.message?.includes('authorization attempt failed')) {
+        errorMessage += 'Please make sure Sign in with Apple is enabled in your Apple Developer account and try again.';
+      } else {
+        errorMessage += err?.message || 'Please try again.';
+      }
+      
+      setError(errorMessage);
+      
+      // Make sure we stay on the sign-in step
+      if (currentStepIndex !== STEPS.length - 1) {
+        setCurrentStepIndex(STEPS.length - 1);
+      }
     }
   }
 
