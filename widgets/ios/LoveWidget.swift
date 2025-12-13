@@ -105,9 +105,13 @@ struct LoveWidget: Widget {
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: kind, provider: Provider()) { entry in
             LoveWidgetEntryView(entry: entry)
+                .containerBackground(for: .widget) {
+                    Color.clear
+                }
         }
         .configurationDisplayName("Partner Drawing")
         .description("Your partner's latest drawing appears here automatically 💕")
         .supportedFamilies([.systemSmall, .systemLarge])
+        .contentMarginsDisabled()
     }
 }

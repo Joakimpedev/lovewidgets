@@ -14,7 +14,7 @@ const IOS_APP_GROUP = 'group.com.lovewidgets.data';
 
 // Configuration: Set to true for testing (both sender and receiver widgets update)
 // Set to false for production (only receiver's widget updates)
-const UPDATE_SENDER_WIDGET = true; // Change to false for production
+const UPDATE_SENDER_WIDGET = false; // Change to false for production
 
 // Try to import SharedGroupPreferences for iOS
 let SharedGroupPreferences: any = null;

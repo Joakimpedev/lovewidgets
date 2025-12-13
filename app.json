@@ -22,7 +22,8 @@
         "NSPhotoLibraryUsageDescription": "LoveWidgets needs access to your photos to set your profile picture and add images to your scrapbook.",
         "NSPhotoLibraryAddUsageDescription": "LoveWidgets needs permission to save images to your photo library when you share creations.",
         "ITSAppUsesNonExemptEncryption": false
-      }
+      },
+      "usesAppleSignIn": true
     },
     "android": {
       "package": "com.lovewidgets.app",
@@ -54,6 +55,15 @@
           }
         }
       ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/icon.png",
+          "color": "#E6F4FE",
+          "sounds": []
+        }
+      ],
+      "expo-apple-authentication",
       "./plugins/withIOSWidget",
       "./plugins/withAndroidWidget"
     ],

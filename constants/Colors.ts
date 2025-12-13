@@ -1,14 +1,14 @@
 /**
  * Color Theme System
  * Multiple pastel themes with matching saturation/darkness levels
- * Based on background: #EDF5FC (light blue) and tab: #5998DE (darker blue)
+ * Default theme: Honey yellow/brown (matching bee avatar)
  */
 
 // ============================================
 // THEME DEFINITIONS
 // ============================================
 
-type ThemeId = 'blue' | 'pink' | 'yellow' | 'purple' | 'green';
+type ThemeId = 'blue' | 'pink' | 'yellow' | 'purple';
 
 interface ThemeColors {
   background: string;        // Main background (#EDF5FC level)
@@ -37,10 +37,10 @@ const THEMES: Record<ThemeId, ThemeColors> = {
     highlight: '#FFE6F3',
   },
   yellow: {
-    background: '#FCF8E8',       // Light yellow
-    tint: '#D4A853',            // Darker yellow/gold
-    secondaryTint: '#FFD89C',   // Soft orange
-    tabIcon: '#D4A853',
+    background: '#FCF5E8',       // Warm honey yellow (default theme)
+    tint: '#B8860B',            // Dark goldenrod/honey brown
+    secondaryTint: '#DEB887',   // Burlywood - warm honey
+    tabIcon: '#B8860B',
     border: '#F8F4E8',
     highlight: '#FFF8E6',
   },
@@ -51,14 +51,6 @@ const THEMES: Record<ThemeId, ThemeColors> = {
     tabIcon: '#A78BDE',
     border: '#F0E8FD',
     highlight: '#F3E6FF',
-  },
-  green: {
-    background: '#E8FCE8',       // Light green
-    tint: '#7BC87B',            // Darker green
-    secondaryTint: '#B8E6B8',   // Soft green
-    tabIcon: '#7BC87B',
-    border: '#E8F8E8',
-    highlight: '#E6FFE6',
   },
 };
 
@@ -81,7 +73,7 @@ const baseColors = {
 // COLOR GENERATOR
 // ============================================
 
-function generateTheme(themeId: ThemeId = 'blue') {
+function generateTheme(themeId: ThemeId = 'yellow') {
   const theme = THEMES[themeId];
   
   return {
@@ -132,8 +124,8 @@ function generateTheme(themeId: ThemeId = 'blue') {
   };
 }
 
-// Default export (Blue theme)
-export const Colors = generateTheme('blue');
+// Default export (Honey yellow/brown theme)
+export const Colors = generateTheme('yellow');
 
 // Export theme generator and types
 export { generateTheme, THEMES };

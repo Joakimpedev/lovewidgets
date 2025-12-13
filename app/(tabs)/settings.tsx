@@ -81,11 +81,10 @@ import { db } from '@/config/firebaseConfig';
 // ============================================
 
 const THEME_OPTIONS: Array<{ id: ThemeId; color: string }> = [
+  { id: 'yellow', color: '#B8860B' },  // Default honey/brown theme
   { id: 'blue', color: '#5998DE' },
   { id: 'pink', color: '#E87BA4' },
-  { id: 'yellow', color: '#D4A853' },
   { id: 'purple', color: '#A78BDE' },
-  { id: 'green', color: '#7BC87B' },
 ];
 
 // ============================================

@@ -1,6 +1,6 @@
 /**
  * Onboarding Flow for LoveWidgets
- * 5-step sequential screens: Welcome → Intent → Profile → Notifications → Sign-In
+ * 4-step sequential screens: Welcome → Profile → Notifications → Sign-In
  */
 
 import React, { useState } from 'react';
@@ -18,20 +18,16 @@ import {
   ScrollView,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
+import * as Notifications from 'expo-notifications';
 import {
   Heart,
-  Send,
-  MessageCircle,
   Sparkles,
   Bell,
   Infinity,
   Check,
-  Gift,
-  BookHeart,
-  Smile,
   Mail,
-  User,
 } from 'lucide-react-native';
+import * as AppleAuthentication from 'expo-apple-authentication';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Colors } from '@/constants/Colors';
@@ -45,22 +41,8 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 // TYPES & DATA
 // ============================================
 
-type OnboardingStep = 'welcome' | 'intent' | 'profile' | 'notifications' | 'signin';
+type OnboardingStep = 'welcome' | 'profile' | 'notifications' | 'signin';
 
-const INTENTS = [
-  { id: 'notes', label: 'Send cute notes & doodles', icon: Send, emoji: '✏️' },
-  { id: 'conversations', label: 'Start meaningful conversations', icon: MessageCircle, emoji: '💬' },
-  { id: 'surprises', label: 'Surprise my partner', icon: Gift, emoji: '🎁' },
-  { id: 'memories', label: 'Build a memory book together', icon: BookHeart, emoji: '📖' },
-  { id: 'daily', label: 'Daily check-ins & reminders', icon: Bell, emoji: '☀️' },
-  { id: 'fun', label: 'Just have fun together', icon: Smile, emoji: '😊' },
-];
-
-const ROLES: { id: UserRole; label: string; emoji: string; description: string }[] = [
-  { id: 'Partner', label: 'Partner', emoji: '💕', description: 'Romantic relationship' },
-  { id: 'Bestie', label: 'Bestie', emoji: '✨', description: 'Best friends' },
-  { id: 'Family', label: 'Family', emoji: '🏠', description: 'Family connection' },
-];
 
 // ============================================
 // STEP COMPONENTS
@@ -111,75 +93,23 @@ function WelcomeStep({ onNext }: { onNext: () => void }) {
   );
 }
 
-function IntentStep({
-  selectedIntents,
-  onToggleIntent,
-  onNext,
-}: {
-  selectedIntents: string[];
-  onToggleIntent: (id: string) => void;
-  onNext: () => void;
-}) {
-  return (
-    <View style={styles.stepContainer}>
-      <Text style={styles.stepTitle}>What brings you here?</Text>
-      <Text style={styles.stepSubtitle}>Select all that excite you</Text>
-
-      <ScrollView style={styles.intentsList} showsVerticalScrollIndicator={false}>
-        {INTENTS.map((intent) => {
-          const isSelected = selectedIntents.includes(intent.id);
-          const IconComponent = intent.icon;
-          return (
-            <Pressable
-              key={intent.id}
-              style={[styles.intentItem, isSelected && styles.intentItemSelected]}
-              onPress={() => onToggleIntent(intent.id)}
-            >
-              <View style={[styles.intentIcon, isSelected && styles.intentIconSelected]}>
-                <IconComponent size={22} color={isSelected ? Colors.light.tint : Colors.light.textSecondary} />
-              </View>
-              <Text style={[styles.intentLabel, isSelected && styles.intentLabelSelected]}>
-                {intent.label}
-              </Text>
-              {isSelected && (
-                <View style={styles.checkCircle}>
-                  <Check size={14} color="#FFFFFF" />
-                </View>
-              )}
-            </Pressable>
-          );
-        })}
-      </ScrollView>
-
-      <TouchableOpacity style={styles.primaryButton} onPress={onNext} activeOpacity={0.85}>
-        <Text style={styles.primaryButtonText}>Continue</Text>
-      </TouchableOpacity>
-    </View>
-  );
-}
-
 function ProfileStep({
   name,
   setName,
-  selectedRole,
-  setSelectedRole,
   onNext,
 }: {
   name: string;
   setName: (name: string) => void;
-  selectedRole: UserRole | null;
-  setSelectedRole: (role: UserRole) => void;
   onNext: () => void;
 }) {
-  const canContinue = name.trim().length >= 2 && selectedRole !== null;
+  const canContinue = name.trim().length >= 2;
 
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       style={styles.stepContainer}
     >
-      <Text style={styles.stepTitle}>Tell us about you</Text>
-      <Text style={styles.stepSubtitle}>So your partner knows it's you</Text>
+      <Text style={styles.stepTitle}>What does your partner call you?</Text>
 
       <View style={styles.profileForm}>
         {/* Name Input */}
@@ -195,26 +125,6 @@ function ProfileStep({
             autoCorrect={false}
             maxLength={30}
           />
-        </View>
-
-        {/* Role Selection */}
-        <View style={styles.inputGroup}>
-          <Text style={styles.inputLabel}>You are their...</Text>
-          <View style={styles.roleGrid}>
-            {ROLES.map((role) => (
-              <Pressable
-                key={role.id}
-                style={[styles.roleCard, selectedRole === role.id && styles.roleCardSelected]}
-                onPress={() => setSelectedRole(role.id)}
-              >
-                <Text style={styles.roleEmoji}>{role.emoji}</Text>
-                <Text style={[styles.roleLabel, selectedRole === role.id && styles.roleLabelSelected]}>
-                  {role.label}
-                </Text>
-                <Text style={styles.roleDescription}>{role.description}</Text>
-              </Pressable>
-            ))}
-          </View>
         </View>
       </View>
 
@@ -233,6 +143,34 @@ function ProfileStep({
 }
 
 function NotificationsStep({ onNext }: { onNext: () => void }) {
+  const [isRequesting, setIsRequesting] = useState(false);
+
+  async function handleEnableNotifications() {
+    setIsRequesting(true);
+    try {
+      // Request notification permissions
+      const { status: existingStatus } = await Notifications.getPermissionsAsync();
+      let finalStatus = existingStatus;
+      
+      if (existingStatus !== 'granted') {
+        const { status } = await Notifications.requestPermissionsAsync();
+        finalStatus = status;
+      }
+      
+      if (finalStatus === 'granted') {
+        // Get the push token (needed for sending notifications)
+        if (Platform.OS !== 'web') {
+          await Notifications.getExpoPushTokenAsync();
+        }
+      }
+    } catch (error) {
+      console.error('Error requesting notification permissions:', error);
+    } finally {
+      setIsRequesting(false);
+      onNext();
+    }
+  }
+
   return (
     <View style={styles.stepContainer}>
       {/* Bell Illustration */}
@@ -245,7 +183,7 @@ function NotificationsStep({ onNext }: { onNext: () => void }) {
 
       <Text style={styles.stepTitle}>Stay Connected</Text>
       <Text style={styles.notificationDescription}>
-        Get notified when your partner sends you a note, so you never miss a moment of love.
+        Get notified when someone sends you a note, so you never miss a moment of love.
       </Text>
 
       <View style={styles.notificationFeatures}>
@@ -263,8 +201,20 @@ function NotificationsStep({ onNext }: { onNext: () => void }) {
         </View>
       </View>
 
-      <TouchableOpacity style={styles.primaryButton} onPress={onNext} activeOpacity={0.85}>
-        <Text style={styles.primaryButtonText}>Enable Notifications</Text>
+      <TouchableOpacity 
+        style={[styles.primaryButton, isRequesting && styles.primaryButtonDisabled]} 
+        onPress={handleEnableNotifications} 
+        activeOpacity={0.85}
+        disabled={isRequesting}
+      >
+        {isRequesting ? (
+          <View style={styles.loadingRow}>
+            <ActivityIndicator size="small" color="#FFFFFF" />
+            <Text style={styles.primaryButtonText}>Requesting...</Text>
+          </View>
+        ) : (
+          <Text style={styles.primaryButtonText}>Enable Notifications</Text>
+        )}
       </TouchableOpacity>
 
       <TouchableOpacity style={styles.skipButton} onPress={onNext}>
@@ -280,12 +230,16 @@ function SignInStep({
   onSignUp,
   onSignIn,
   onSignInAnonymous,
+  onSignInWithApple,
+  onSignInWithGoogle,
 }: {
   isLoading: boolean;
   error: string;
   onSignUp: (email: string, password: string) => void;
   onSignIn: (email: string, password: string) => void;
   onSignInAnonymous: () => void;
+  onSignInWithApple: () => void;
+  onSignInWithGoogle: () => void;
 }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -393,6 +347,38 @@ function SignInStep({
           </TouchableOpacity>
         </View>
 
+        {/* Social Sign-In Buttons */}
+        <View style={styles.socialAuthContainer}>
+          {/* Google Sign In - Primary on Android, also available on iOS */}
+          <TouchableOpacity
+            style={styles.googleButton}
+            onPress={onSignInWithGoogle}
+            activeOpacity={0.85}
+            disabled={isLoading}
+          >
+            <View style={styles.googleButtonContent}>
+              <View style={styles.googleIcon}>
+                <Text style={styles.googleIconText}>G</Text>
+              </View>
+              <Text style={styles.googleButtonText}>
+                {Platform.OS === 'android' ? 'Continue with Google' : 'Continue with Google'}
+              </Text>
+            </View>
+          </TouchableOpacity>
+
+          {/* Apple Sign In (iOS only) */}
+          {Platform.OS === 'ios' && (
+            <AppleAuthentication.AppleAuthenticationButton
+              buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
+              buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
+              cornerRadius={14}
+              style={styles.appleButton}
+              onPress={onSignInWithApple}
+              disabled={isLoading}
+            />
+          )}
+        </View>
+
         {/* Divider */}
         <View style={styles.authDivider}>
           <View style={styles.authDividerLine} />
@@ -444,15 +430,13 @@ function ProgressDots({ currentStep, totalSteps }: { currentStep: number; totalS
 // MAIN SCREEN
 // ============================================
 
-const STEPS: OnboardingStep[] = ['welcome', 'intent', 'profile', 'notifications', 'signin'];
+const STEPS: OnboardingStep[] = ['welcome', 'profile', 'notifications', 'signin'];
 
 export default function OnboardingScreen() {
-  const { signIn, signUpWithEmail, signInWithEmail, isLoading: authLoading } = useAuth();
+  const { signIn, signUpWithEmail, signInWithEmail, signInWithApple, signInWithGoogle, isLoading: authLoading } = useAuth();
 
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
-  const [selectedIntents, setSelectedIntents] = useState<string[]>([]);
   const [name, setName] = useState('');
-  const [selectedRole, setSelectedRole] = useState<UserRole | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -465,11 +449,6 @@ export default function OnboardingScreen() {
     }
   }
 
-  function toggleIntent(id: string) {
-    setSelectedIntents((prev) =>
-      prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
-    );
-  }
 
   // Helper to format Firebase auth errors
   function getAuthErrorMessage(errorCode: string): string {
@@ -495,22 +474,21 @@ export default function OnboardingScreen() {
 
   // Complete onboarding after successful auth
   async function completeOnboarding(userId: string) {
-    if (!selectedRole) return;
+    // Use 'Partner' as default role
+    const defaultRole: UserRole = 'Partner';
 
     // Save user profile locally
     await saveUserProfile({
       name: name.trim(),
-      role: selectedRole,
+      role: defaultRole,
       createdAt: new Date().toISOString(),
     });
 
     // Create user profile in Firestore (with invite code)
-    await createUserProfile(userId, name.trim(), selectedRole);
+    await createUserProfile(userId, name.trim(), defaultRole);
   }
 
   async function handleSignInAnonymous() {
-    if (!selectedRole) return;
-
     setIsLoading(true);
     setError('');
 
@@ -528,8 +506,6 @@ export default function OnboardingScreen() {
   }
 
   async function handleSignUp(email: string, password: string) {
-    if (!selectedRole) return;
-
     setIsLoading(true);
     setError('');
 
@@ -554,13 +530,57 @@ export default function OnboardingScreen() {
       const userCredential = await signInWithEmail(email, password);
       // For existing users, we just sign them in - profile already exists
       // Navigation will be handled by the auth state change in _layout.tsx
-      if (userCredential?.user && selectedRole) {
+      if (userCredential?.user && name.trim().length >= 2) {
         // Update profile if they went through onboarding again
         await completeOnboarding(userCredential.user.uid);
       }
     } catch (err: any) {
       console.error('Error during sign-in:', err);
       setError(getAuthErrorMessage(err?.code));
+      setIsLoading(false);
+    }
+  }
+
+  async function handleSignInWithApple() {
+    setIsLoading(true);
+    setError('');
+
+    try {
+      const userCredential = await signInWithApple();
+      if (userCredential?.user) {
+        await completeOnboarding(userCredential.user.uid);
+      }
+      // Navigation will be handled by the auth state change in _layout.tsx
+    } catch (err: any) {
+      console.error('Error during Apple sign-in:', err);
+      // Don't show error if user canceled
+      if (err?.message?.includes('canceled')) {
+        setError('');
+      } else {
+        setError(err?.message || 'Failed to sign in with Apple. Please try again.');
+      }
+      setIsLoading(false);
+    }
+  }
+
+  async function handleSignInWithGoogle() {
+    setIsLoading(true);
+    setError('');
+
+    try {
+      const userCredential = await signInWithGoogle();
+      if (userCredential?.user) {
+        await completeOnboarding(userCredential.user.uid);
+      }
+      // Navigation will be handled by the auth state change in _layout.tsx
+    } catch (err: any) {
+      console.error('Error during Google sign-in:', err);
+      // Don't show error if user canceled
+      if (err?.message?.includes('canceled')) {
+        setError('');
+      } else {
+        setError(err?.message || 'Failed to sign in with Google. Please try again.');
+      }
       setIsLoading(false);
     }
   }
@@ -574,19 +594,10 @@ export default function OnboardingScreen() {
 
       {/* Step Content */}
       {currentStep === 'welcome' && <WelcomeStep onNext={goToNextStep} />}
-      {currentStep === 'intent' && (
-        <IntentStep
-          selectedIntents={selectedIntents}
-          onToggleIntent={toggleIntent}
-          onNext={goToNextStep}
-        />
-      )}
       {currentStep === 'profile' && (
         <ProfileStep
           name={name}
           setName={setName}
-          selectedRole={selectedRole}
-          setSelectedRole={setSelectedRole}
           onNext={goToNextStep}
         />
       )}
@@ -598,6 +609,8 @@ export default function OnboardingScreen() {
           onSignUp={handleSignUp}
           onSignIn={handleSignIn}
           onSignInAnonymous={handleSignInAnonymous}
+          onSignInWithApple={handleSignInWithApple}
+          onSignInWithGoogle={handleSignInWithGoogle}
         />
       )}
     </SafeAreaView>
@@ -726,56 +739,6 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
 
-  // Intent Step
-  intentsList: {
-    flex: 1,
-    marginBottom: 20,
-  },
-  intentItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Colors.light.cardBackground,
-    borderRadius: 14,
-    padding: 14,
-    marginBottom: 10,
-    borderWidth: 2,
-    borderColor: Colors.light.border,
-    gap: 12,
-  },
-  intentItemSelected: {
-    borderColor: Colors.light.tint,
-    backgroundColor: Colors.light.highlight,
-  },
-  intentIcon: {
-    width: 42,
-    height: 42,
-    borderRadius: 12,
-    backgroundColor: Colors.light.highlight,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  intentIconSelected: {
-    backgroundColor: '#FFFFFF',
-  },
-  intentLabel: {
-    flex: 1,
-    fontSize: 15,
-    fontWeight: '500',
-    color: Colors.light.text,
-  },
-  intentLabelSelected: {
-    color: Colors.light.tint,
-    fontWeight: '600',
-  },
-  checkCircle: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    backgroundColor: Colors.light.tint,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-
   // Profile Step
   profileForm: {
     flex: 1,
@@ -798,41 +761,6 @@ const styles = StyleSheet.create({
     color: Colors.light.text,
     borderWidth: 2,
     borderColor: Colors.light.border,
-  },
-  roleGrid: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  roleCard: {
-    flex: 1,
-    backgroundColor: Colors.light.cardBackground,
-    borderRadius: 16,
-    padding: 14,
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: Colors.light.border,
-  },
-  roleCardSelected: {
-    borderColor: Colors.light.tint,
-    backgroundColor: Colors.light.highlight,
-  },
-  roleEmoji: {
-    fontSize: 26,
-    marginBottom: 6,
-  },
-  roleLabel: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: Colors.light.text,
-    marginBottom: 2,
-  },
-  roleLabelSelected: {
-    color: Colors.light.tint,
-  },
-  roleDescription: {
-    fontSize: 10,
-    color: Colors.light.textSecondary,
-    textAlign: 'center',
   },
 
   // Notifications Step
@@ -980,6 +908,58 @@ const styles = StyleSheet.create({
   },
   authToggleTextBold: {
     color: Colors.light.tint,
+    fontWeight: '600',
+  },
+
+  // Social Auth
+  socialAuthContainer: {
+    gap: 12,
+    marginTop: 8,
+  },
+  appleButton: {
+    width: '100%',
+    height: 50,
+  },
+  googleButton: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    paddingVertical: 16,
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: Colors.light.border,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+      },
+      android: {
+        elevation: 2,
+      },
+    }),
+  },
+  googleButtonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  googleIcon: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#4285F4',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  googleIconText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  googleButtonText: {
+    color: Colors.light.text,
+    fontSize: 16,
     fontWeight: '600',
   },
 

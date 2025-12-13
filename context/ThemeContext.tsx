@@ -30,8 +30,8 @@ const THEME_STORAGE_KEY = '@LoveWidgets:theme';
 const VISUAL_THEME_STORAGE_KEY = '@LoveWidgets:visualTheme';
 
 export function ColorThemeProvider({ children }: { children: ReactNode }) {
-  const [themeId, setThemeId] = useState<ThemeId>('blue');
-  const [baseColors, setBaseColors] = useState(generateTheme('blue'));
+  const [themeId, setThemeId] = useState<ThemeId>('yellow');
+  const [baseColors, setBaseColors] = useState(generateTheme('yellow'));
   const [visualThemeId, setVisualThemeId] = useState<VisualThemeId>('default');
   const [visualTheme, setVisualThemeState] = useState<ThemeConfig>(getThemeConfig('default'));
   const systemColorScheme = useColorScheme();
@@ -73,7 +73,7 @@ export function ColorThemeProvider({ children }: { children: ReactNode }) {
     async function loadTheme() {
       try {
         const savedTheme = await AsyncStorage.getItem(THEME_STORAGE_KEY);
-        if (savedTheme && ['blue', 'pink', 'yellow', 'purple', 'green'].includes(savedTheme)) {
+        if (savedTheme && ['blue', 'pink', 'yellow', 'purple'].includes(savedTheme)) {
           const theme = savedTheme as ThemeId;
           setThemeId(theme);
           setBaseColors(generateTheme(theme));

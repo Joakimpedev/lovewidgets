@@ -12,7 +12,20 @@
           "package_name": "com.lovewidgets.app"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "843832822074-ai8bthvvi63h5tmk6u9bkj1op7g7drnb.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.lovewidgets.app",
+            "certificate_hash": "495fea6ed8da09b1325b0b100364f2435b06a4cb"
+          }
+        },
+        {
+          "client_id": "843832822074-r2sqg3pav42a4f3fhcepcr3cj2t6jhfa.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyBohLYz69PHZKg4Rt00IpoN-GRKHqQjLrU"
@@ -20,7 +33,19 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "843832822074-r2sqg3pav42a4f3fhcepcr3cj2t6jhfa.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "843832822074-q5ugqh37h94db9t0av7fbgjiiborjb4e.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.lovewidgets.app"
+              }
+            }
+          ]
         }
       }
     }
