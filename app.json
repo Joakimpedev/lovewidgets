@@ -15,7 +15,8 @@
       "entitlements": {
         "com.apple.security.application-groups": [
           "group.com.lovewidgets.data"
-        ]
+        ],
+        "aps-environment": "development"
       },
       "buildNumber": "1",
       "infoPlist": {

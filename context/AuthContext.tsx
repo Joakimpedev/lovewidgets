@@ -3,22 +3,22 @@
  * Provides user state and authentication functions using Firebase Auth
  */
 
-import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import { auth } from '@/config/firebaseConfig';
+import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
+import * as AppleAuthentication from 'expo-apple-authentication';
 import {
+  createUserWithEmailAndPassword,
+  GoogleAuthProvider,
+  OAuthProvider,
   onAuthStateChanged,
   signInAnonymously,
-  createUserWithEmailAndPassword,
-  signInWithEmailAndPassword,
   signInWithCredential,
-  OAuthProvider,
-  GoogleAuthProvider,
+  signInWithEmailAndPassword,
   User,
   UserCredential,
 } from 'firebase/auth';
+import React, { createContext, ReactNode, useContext, useEffect, useState } from 'react';
 import { Platform } from 'react-native';
-import * as AppleAuthentication from 'expo-apple-authentication';
-import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
-import { auth } from '@/config/firebaseConfig';
 
 // ============================================
 // TYPES
@@ -126,7 +126,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       // Check if Apple Authentication is available
       const isAvailable = await AppleAuthentication.isAvailableAsync();
       if (!isAvailable) {
-        throw new Error('Apple Sign In is not available on this device');
+        throw new Error('Apple Sign In is not available. Make sure you are using a development build (not Expo Go) and testing on a real device.');
       }
 
       // Request Apple ID credential
@@ -140,7 +140,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       // Create Firebase credential from Apple ID token
       const { identityToken, nonce } = appleCredential;
       if (!identityToken) {
-        throw new Error('Apple Sign In failed - no identity token');
+        throw new Error('Apple Sign In failed - no identity token received');
       }
 
       const provider = new OAuthProvider('apple.com');
@@ -157,8 +157,13 @@ export function AuthProvider({ children }: AuthProviderProps) {
       setIsLoading(false);
       
       // Handle user cancellation gracefully
-      if (error?.code === 'ERR_CANCELED') {
+      if (error?.code === 'ERR_CANCELED' || error?.message?.includes('canceled')) {
         throw new Error('Sign in was canceled');
+      }
+      
+      // Provide more helpful error messages
+      if (error?.message?.includes('unknown reason') || error?.message?.includes('authorization attempt failed')) {
+        throw new Error('Apple Sign In failed. Make sure you are using a development build (not Expo Go), testing on a real device, and that Sign in with Apple is enabled in your Apple Developer account.');
       }
       
       throw error;

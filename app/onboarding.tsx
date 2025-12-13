@@ -3,37 +3,38 @@
  * 4-step sequential screens: Welcome → Profile → Notifications → Sign-In
  */
 
+import * as AppleAuthentication from 'expo-apple-authentication';
+import * as Notifications from 'expo-notifications';
+import { StatusBar } from 'expo-status-bar';
+import {
+  Bell,
+  Check,
+  Home,
+  Mail,
+  MessageSquare,
+  Sparkles,
+  Sprout
+} from 'lucide-react-native';
 import React, { useState } from 'react';
 import {
-  View,
+  ActivityIndicator,
+  Dimensions,
+  Image,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
-  StyleSheet,
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  ActivityIndicator,
-  Dimensions,
-  ScrollView,
+  View
 } from 'react-native';
-import { StatusBar } from 'expo-status-bar';
-import * as Notifications from 'expo-notifications';
-import {
-  Heart,
-  Sparkles,
-  Bell,
-  Infinity,
-  Check,
-  Mail,
-} from 'lucide-react-native';
-import * as AppleAuthentication from 'expo-apple-authentication';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Colors } from '@/constants/Colors';
-import { saveUserProfile, UserRole } from '@/utils/storage';
 import { useAuth } from '@/context/AuthContext';
 import { createUserProfile } from '@/utils/pairing';
+import { saveUserProfile, UserRole } from '@/utils/storage';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -49,35 +50,48 @@ type OnboardingStep = 'welcome' | 'profile' | 'notifications' | 'signin';
 // ============================================
 
 function WelcomeStep({ onNext }: { onNext: () => void }) {
+  const [activeIndex, setActiveIndex] = useState(0);
+  const scrollViewRef = React.useRef<ScrollView>(null);
+
+  const features = [
+    {
+      icon: Home,
+      text: 'Send fun drawings and messages directly to your partner\'s home screen',
+    },
+    {
+      icon: MessageSquare,
+      text: 'Learn more about eachother through daily questions - from fun and casual to meaningful and deep',
+    },
+    {
+      icon: Sprout,
+      text: 'Relationships needs attention and care! Build a shared virtual garden from coins you earn every day',
+    },
+  ];
+
+  const cardWidth = SCREEN_WIDTH - 80;
+  const cardSpacing = 16;
+  const horizontalPadding = 24;
+
+  const handleScroll = (event: any) => {
+    const scrollPosition = event.nativeEvent.contentOffset.x;
+    const totalCardWidth = cardWidth + cardSpacing;
+    const index = Math.round(scrollPosition / totalCardWidth);
+    const clampedIndex = Math.min(Math.max(index, 0), features.length - 1);
+    setActiveIndex(clampedIndex);
+  };
+
   return (
     <View style={styles.stepContainer}>
-      {/* Elegant Illustration */}
-      <View style={styles.illustrationContainer}>
-        <View style={styles.infinityCircle}>
-          <Infinity size={72} color={Colors.light.tint} strokeWidth={1.5} />
-        </View>
-        <View style={styles.floatingHearts}>
-          <Heart
-            size={22}
-            color={Colors.light.secondaryTint}
-            fill={Colors.light.secondaryTint}
-            style={styles.floatingHeart1}
-          />
-          <Heart
-            size={16}
-            color={Colors.light.tint}
-            fill={Colors.light.tint}
-            style={styles.floatingHeart2}
-          />
-          <Sparkles
-            size={18}
-            color={Colors.light.streakFire}
-            style={styles.floatingSpark}
-          />
-        </View>
+      {/* Bee Avatar at Top */}
+      <View style={styles.beeAvatarContainer}>
+        <Image
+          source={require('@/assets/bee/happy_heart.png')}
+          style={styles.beeAvatar}
+          resizeMode="contain"
+        />
       </View>
 
-      {/* Welcome Text */}
+      {/* Welcome Text Below Avatar */}
       <View style={styles.textContainer}>
         <Text style={styles.welcomeTitle}>Welcome to LoveWidgets</Text>
         <Text style={styles.welcomeSubtitle}>
@@ -85,7 +99,58 @@ function WelcomeStep({ onNext }: { onNext: () => void }) {
         </Text>
       </View>
 
-      {/* Continue Button */}
+      {/* Horizontal Scrollable Feature Cards with Pagination */}
+      <View style={styles.featuresWrapper}>
+        <ScrollView
+          ref={scrollViewRef}
+          horizontal
+          style={styles.featuresScrollView}
+          contentContainerStyle={styles.featuresScrollContent}
+          showsHorizontalScrollIndicator={false}
+          snapToInterval={cardWidth + cardSpacing}
+          snapToAlignment="start"
+          decelerationRate="fast"
+          pagingEnabled={false}
+          onScroll={handleScroll}
+          scrollEventThrottle={16}
+        >
+          {features.map((feature, index) => {
+            const IconComponent = feature.icon;
+            const isLast = index === features.length - 1;
+            return (
+              <View
+                key={index}
+                style={[
+                  styles.featureSquare,
+                  index === 1 && styles.featureSquareRotated,
+                  index === 2 && styles.featureSquareRotatedReverse,
+                  isLast && styles.featureSquareLast,
+                ]}
+              >
+                <View style={styles.featureIconContainer}>
+                  <IconComponent size={40} color={Colors.light.tint} />
+                </View>
+                <Text style={styles.featureText}>{feature.text}</Text>
+              </View>
+            );
+          })}
+        </ScrollView>
+
+        {/* Pagination Indicators - Right Under Cards */}
+        <View style={styles.paginationContainer}>
+          {features.map((_, index) => (
+            <View
+              key={index}
+              style={[
+                styles.paginationIndicator,
+                index === activeIndex && styles.paginationIndicatorActive,
+              ]}
+            />
+          ))}
+        </View>
+      </View>
+
+      {/* Continue Button - Always Active */}
       <TouchableOpacity style={styles.primaryButton} onPress={onNext} activeOpacity={0.85}>
         <Text style={styles.primaryButtonText}>Get Started</Text>
       </TouchableOpacity>
@@ -109,35 +174,45 @@ function ProfileStep({
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       style={styles.stepContainer}
     >
-      <Text style={styles.stepTitle}>What does your partner call you?</Text>
-
-      <View style={styles.profileForm}>
-        {/* Name Input */}
-        <View style={styles.inputGroup}>
-          <Text style={styles.inputLabel}>Your name</Text>
-          <TextInput
-            style={styles.textInput}
-            placeholder="Enter your name"
-            placeholderTextColor={Colors.light.textSecondary}
-            value={name}
-            onChangeText={setName}
-            autoCapitalize="words"
-            autoCorrect={false}
-            maxLength={30}
+      <View style={styles.profileCenteredContainer}>
+        {/* Bee Avatar */}
+        <View style={styles.profileBeeAvatarContainer}>
+          <Image
+            source={require('@/assets/bee/angled_right.png')}
+            style={styles.profileBeeAvatar}
+            resizeMode="contain"
           />
         </View>
-      </View>
 
-      <TouchableOpacity
-        style={[styles.primaryButton, !canContinue && styles.primaryButtonDisabled]}
-        onPress={onNext}
-        activeOpacity={0.85}
-        disabled={!canContinue}
-      >
-        <Text style={[styles.primaryButtonText, !canContinue && styles.primaryButtonTextDisabled]}>
-          Continue
-        </Text>
-      </TouchableOpacity>
+        <Text style={styles.stepTitle}>What does your partner call you?</Text>
+
+        <View style={styles.profileForm}>
+          {/* Name Input */}
+          <View style={styles.inputGroup}>
+            <TextInput
+              style={styles.textInput}
+              placeholder="Enter your name"
+              placeholderTextColor={Colors.light.textSecondary}
+              value={name}
+              onChangeText={setName}
+              autoCapitalize="words"
+              autoCorrect={false}
+              maxLength={30}
+            />
+          </View>
+        </View>
+
+        <TouchableOpacity
+          style={[styles.primaryButton, !canContinue && styles.primaryButtonDisabled]}
+          onPress={onNext}
+          activeOpacity={0.85}
+          disabled={!canContinue}
+        >
+          <Text style={[styles.primaryButtonText, !canContinue && styles.primaryButtonTextDisabled]}>
+            Continue
+          </Text>
+        </TouchableOpacity>
+      </View>
     </KeyboardAvoidingView>
   );
 }
@@ -160,11 +235,22 @@ function NotificationsStep({ onNext }: { onNext: () => void }) {
       if (finalStatus === 'granted') {
         // Get the push token (needed for sending notifications)
         if (Platform.OS !== 'web') {
-          await Notifications.getExpoPushTokenAsync();
+          try {
+            await Notifications.getExpoPushTokenAsync();
+          } catch (tokenError: any) {
+            // If aps-environment entitlement is missing, this will fail
+            // But we can still continue - local notifications will work
+            console.warn('Could not get push token (may need rebuild with entitlements):', tokenError?.message);
+          }
         }
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error requesting notification permissions:', error);
+      // If the error is about aps-environment, it means the app needs to be rebuilt
+      // But we can still continue - the user can enable notifications later
+      if (error?.message?.includes('aps-environment')) {
+        console.warn('Push notification entitlement missing. Rebuild the app to enable push notifications.');
+      }
     } finally {
       setIsRequesting(false);
       onNext();
@@ -367,14 +453,13 @@ function SignInStep({
           </TouchableOpacity>
 
           {/* Apple Sign In (iOS only) */}
-          {Platform.OS === 'ios' && (
+          {Platform.OS === 'ios' && !isLoading && (
             <AppleAuthentication.AppleAuthenticationButton
               buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
               buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
               cornerRadius={14}
               style={styles.appleButton}
               onPress={onSignInWithApple}
-              disabled={isLoading}
             />
           )}
         </View>
@@ -704,7 +789,8 @@ const styles = StyleSheet.create({
   },
   textContainer: {
     alignItems: 'center',
-    marginBottom: 40,
+    marginTop: 16,
+    marginBottom: 24,
   },
   welcomeTitle: {
     fontSize: 26,
@@ -720,6 +806,113 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 22,
     paddingHorizontal: 16,
+  },
+  // Feature Squares - Horizontal Scrollable
+  featuresWrapper: {
+    marginVertical: 16,
+  },
+  featuresScrollView: {
+    marginBottom: 12,
+  },
+  featuresScrollContent: {
+    paddingLeft: 24,
+    paddingRight: 24,
+    paddingVertical: 8,
+    alignItems: 'center',
+  },
+  featureSquare: {
+    width: SCREEN_WIDTH - 80,
+    minHeight: 180,
+    backgroundColor: Colors.light.cardBackground,
+    borderRadius: 20,
+    padding: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: Colors.light.border,
+    marginRight: 16,
+    ...Platform.select({
+      ios: {
+        shadowColor: Colors.light.tint,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.15,
+        shadowRadius: 12,
+      },
+      android: {
+        elevation: 4,
+      },
+    }),
+  },
+  featureSquareLast: {
+    marginRight: 0,
+  },
+  featureSquareRotated: {
+    transform: [{ rotate: '3deg' }],
+  },
+  featureSquareRotatedReverse: {
+    transform: [{ rotate: '-3deg' }],
+  },
+  featureIconContainer: {
+    marginBottom: 16,
+  },
+  featureText: {
+    fontSize: 15,
+    color: Colors.light.text,
+    textAlign: 'center',
+    fontWeight: '500',
+    lineHeight: 22,
+  },
+  // Bee Avatar
+  beeAvatarContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 8,
+    marginBottom: 12,
+  },
+  beeAvatar: {
+    width: 120,
+    height: 120,
+  },
+  // Pagination Indicators
+  paginationContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+    paddingVertical: 4,
+    minHeight: 16,
+  },
+  paginationIndicator: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: Colors.light.tint,
+    marginHorizontal: 4,
+    opacity: 0.3,
+  },
+  paginationIndicatorActive: {
+    width: 32,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: Colors.light.tint,
+    marginHorizontal: 4,
+    opacity: 1,
+  },
+  // Profile Centered Container
+  profileCenteredContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 20,
+  },
+  profileBeeAvatarContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 24,
+  },
+  profileBeeAvatar: {
+    width: 100,
+    height: 100,
   },
 
   // Step Headers
@@ -741,7 +934,9 @@ const styles = StyleSheet.create({
 
   // Profile Step
   profileForm: {
-    flex: 1,
+    width: '100%',
+    maxWidth: 320,
+    marginBottom: 24,
   },
   inputGroup: {
     marginBottom: 24,
@@ -761,6 +956,7 @@ const styles = StyleSheet.create({
     color: Colors.light.text,
     borderWidth: 2,
     borderColor: Colors.light.border,
+    width: '100%',
   },
 
   // Notifications Step
@@ -769,6 +965,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginTop: 32,
     marginBottom: 28,
+    width: '100%',
   },
   bellCircle: {
     width: 110,
@@ -781,7 +978,8 @@ const styles = StyleSheet.create({
   notificationDot: {
     position: 'absolute',
     top: 6,
-    right: SCREEN_WIDTH / 2 - 75,
+    left: '50%',
+    marginLeft: 57,
     width: 18,
     height: 18,
     borderRadius: 9,
@@ -795,17 +993,21 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 21,
     marginBottom: 28,
-    paddingHorizontal: 12,
+    paddingHorizontal: 24,
+    width: '100%',
   },
   notificationFeatures: {
     gap: 12,
     marginBottom: 36,
+    width: '100%',
+    alignItems: 'center',
   },
   notificationFeature: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 10,
+    width: '100%',
   },
   notificationFeatureText: {
     fontSize: 14,
@@ -1011,6 +1213,7 @@ const styles = StyleSheet.create({
     paddingVertical: 17,
     alignItems: 'center',
     marginTop: 'auto',
+    width: '100%',
     ...Platform.select({
       ios: {
         shadowColor: Colors.light.tint,
@@ -1045,11 +1248,13 @@ const styles = StyleSheet.create({
   skipButton: {
     paddingVertical: 14,
     alignItems: 'center',
+    width: '100%',
   },
   skipButtonText: {
     color: Colors.light.textSecondary,
     fontSize: 14,
     fontWeight: '500',
+    textAlign: 'center',
   },
   loadingRow: {
     flexDirection: 'row',
